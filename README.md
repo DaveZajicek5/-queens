@@ -1,8 +1,22 @@
 # Queens Archive
 
-A tiny offline-friendly Queens player/importer.
+A tiny offline-friendly Queens player/importer/generator for mobile.
 
-Current goal: import solved LinkedIn Queens-style boards from HTML blocks like the ones on `zipgameonline.com/linkedin-queens-answers/day-583`, serialize them, and play them on mobile without a daily limit.
+It can import solved LinkedIn Queens-style boards from HTML blocks like the ones on `zipgameonline.com/linkedin-queens-answers/day-583`, serialize them, and play them on mobile without a daily limit. It also has a fully random generator that searches for a connected-region board with a unique solution.
+
+## Features
+
+- Archive picker for imported days.
+- Random 7×7, 8×8, and 9×9 generation.
+- Solver-backed uniqueness check for generated boards.
+- Square/cube-style X and queen marks.
+- Thick outer borders around each same-color region.
+- Timer that starts on the first move.
+- Check mode that highlights conflicts and wrong marks.
+- Hint mode that highlights a wrong mark or the next solution square.
+- Show/hide solution.
+- Local solve history, best time, hint count, play rating, visual rating.
+- JSON stats export.
 
 ## Data model
 
@@ -16,7 +30,8 @@ Each puzzle is stored as:
   regions: "0000112200001122...",
   solution: "...Q..........Q...",
   solutionCols: [4, 7, 5, 3, 1, 6, 8, 2],
-  url: "https://zipgameonline.com/linkedin-queens-answers/day-583"
+  url: "https://zipgameonline.com/linkedin-queens-answers/day-583",
+  unique: true
 }
 ```
 
@@ -61,9 +76,13 @@ node tools/import-zipgame-queens.mjs scrape 583 801 --out src/puzzles.js
 
 The script skips pages it cannot parse or fetch. If the public archive only exposes a smaller range, the output will contain only the available days.
 
-## Next steps
+## Random generation
 
-- Add imported days 583+ as `src/puzzles.js`.
-- Add GitHub Pages deployment.
-- Add a generated-puzzle mode using the same solver.
-- Add local progress/history storage.
+The client-side generator:
+
+1. grows `N` connected random regions on an `N×N` board,
+2. solves the region layout with Queens constraints,
+3. accepts the board only when exactly one solution is found,
+4. stores that solution in the active in-browser puzzle object.
+
+Generated boards are not saved to the archive file automatically. Solve/rating data is stored locally in `localStorage` and can be exported as JSON from the UI.
