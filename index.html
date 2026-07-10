@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#111827" />
+  <title>Queens Archive</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #0f172a;
+      --panel: #111827;
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+      --line: rgba(255,255,255,.22);
+      --line-strong: rgba(255,255,255,.65);
+      --danger: #fecaca;
+      --ok: #bbf7d0;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: radial-gradient(circle at top, #1e293b 0, var(--bg) 48rem);
+      color: var(--text);
+      display: flex;
+      justify-content: center;
+      padding: max(16px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
+    }
+    main { width: min(680px, 100%); display: grid; gap: 16px; align-content: start; }
+    header, .panel {
+      background: color-mix(in srgb, var(--panel) 88%, transparent);
+      border: 1px solid rgba(255,255,255,.12);
+      border-radius: 20px;
+      box-shadow: 0 20px 60px rgba(0,0,0,.28);
+    }
+    header { padding: 18px; display: grid; gap: 8px; }
+    h1 { margin: 0; font-size: clamp(1.7rem, 7vw, 3rem); line-height: 1; }
+    p { margin: 0; color: var(--muted); line-height: 1.45; }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 12px; }
+    select, button {
+      border: 1px solid rgba(255,255,255,.18);
+      background: rgba(255,255,255,.08);
+      color: var(--text);
+      border-radius: 999px;
+      min-height: 42px;
+      padding: 0 14px;
+      font: inherit;
+    }
+    select { flex: 1 1 180px; }
+    button { cursor: pointer; touch-action: manipulation; user-select: none; }
+    button:hover { background: rgba(255,255,255,.14); }
+    .board-wrap { padding: 12px; display: grid; justify-content: center; gap: 12px; }
+    .board {
+      display: grid;
+      width: min(92vw, 520px);
+      aspect-ratio: 1 / 1;
+      border: 3px solid var(--line-strong);
+      border-radius: 16px;
+      overflow: hidden;
+      background: rgba(255,255,255,.05);
+    }
+    .cell {
+      position: relative;
+      display: grid;
+      place-items: center;
+      border: 1px solid var(--line);
+      color: #111827;
+      font-size: clamp(18px, 7vw, 34px);
+      font-weight: 800;
+      cursor: pointer;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .cell[data-state="x"]::before, .cell[data-state="x"]::after {
+      content: "";
+      position: absolute;
+      width: 48%;
+      height: 4px;
+      border-radius: 999px;
+      background: rgba(15, 23, 42, .68);
+    }
+    .cell[data-state="x"]::before { transform: rotate(45deg); }
+    .cell[data-state="x"]::after { transform: rotate(-45deg); }
+    .cell[data-state="q"]::before { content: "♛"; filter: drop-shadow(0 1px 1px rgba(255,255,255,.35)); }
+    .cell.error { outline: 3px solid rgba(239, 68, 68, .75); outline-offset: -4px; }
+    .cell.solution::after {
+      content: "♛";
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      color: rgba(17, 24, 39, .34);
+    }
+    .status { min-height: 24px; text-align: center; color: var(--muted); font-weight: 600; }
+    .status.ok { color: var(--ok); }
+    .status.bad { color: var(--danger); }
+    .meta { font-size: .9rem; text-align: center; color: var(--muted); }
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg: #f8fafc;
+        --panel: #ffffff;
+        --text: #0f172a;
+        --muted: #64748b;
+        --line: rgba(15,23,42,.18);
+        --line-strong: rgba(15,23,42,.44);
+      }
+      body { background: linear-gradient(#e0f2fe, #f8fafc 16rem); }
+      select, button { background: white; border-color: rgba(15,23,42,.16); }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Queens Archive</h1>
+      <p>Offline-playable Queens boards imported from solved HTML. Tap a cell to cycle empty → X → queen.</p>
+    </header>
+    <section class="panel">
+      <div class="toolbar">
+        <select id="puzzleSelect" aria-label="Puzzle"></select>
+        <button id="clearButton" type="button">Clear</button>
+        <button id="solutionButton" type="button">Show solution</button>
+      </div>
+      <div class="board-wrap">
+        <div id="board" class="board" role="grid" aria-label="Queens board"></div>
+        <div id="status" class="status"></div>
+        <div id="meta" class="meta"></div>
+      </div>
+    </section>
+  </main>
+  <script type="module" src="./src/app.js"></script>
+</body>
+</html>
