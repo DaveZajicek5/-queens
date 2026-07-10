@@ -7,6 +7,7 @@ const COLORS = [
 ];
 const ALPHABET = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const STORAGE_KEY = "queens-archive-stats:v2";
+const UNIT_TYPES = ["row", "col", "region"];
 
 const boardEl = document.querySelector("#board");
 const selectEl = document.querySelector("#puzzleSelect");
@@ -27,7 +28,7 @@ let activePuzzle = PUZZLES[0];
 let marks = [];
 let showSolution = false;
 let checkMode = false;
-let hintIndex = null;
+let hintAction = null;
 let hintCount = 0;
 let hintMessage = "";
 let solvedLogged = false;
@@ -49,8 +50,8 @@ function solutionIndices(puzzle) {
   return [...puzzle.solution].map((v, i) => v === "Q" ? i : -1).filter(i => i >= 0);
 }
 
-function queenIndices() {
-  return marks.map((state, i) => state === "q" ? i : -1).filter(i => i >= 0);
+function queenIndices(state = marks) {
+  return state.map((value, i) => value === "q" ? i : -1).filter(i => i >= 0);
 }
 
 function getRegion(puzzle, idx) {
@@ -79,7 +80,7 @@ function loadPuzzle(puzzle, selectValue = puzzle.id) {
   marks = Array(activePuzzle.size * activePuzzle.size).fill("");
   showSolution = false;
   checkMode = false;
-  hintIndex = null;
+  hintAction = null;
   hintCount = 0;
   hintMessage = "";
   solvedLogged = false;
@@ -114,14 +115,17 @@ function render() {
       applyRegionBorders(cell, row, col, idx, regionId, n);
 
       if (errors.has(idx)) cell.classList.add("error");
-      if (hintIndex === idx) cell.classList.add("hint");
+      if (hintAction?.idx === idx) {
+        cell.classList.add("hint");
+        cell.dataset.hintAction = hintAction.action;
+      }
       if (showSolution && answer.has(idx) && marks[idx] !== "q") cell.classList.add("solution");
 
       cell.addEventListener("click", () => {
         startTimer();
         marks[idx] = nextState(marks[idx]);
         checkMode = false;
-        hintIndex = null;
+        hintAction = null;
         hintMessage = "";
         render();
       });
@@ -149,8 +153,9 @@ function metaText(puzzle) {
   const unique = puzzle.unique === false ? "not uniqueness-verified" : "unique";
   const source = puzzle.source ?? "unknown source";
   const attempts = puzzle.generatedAttempts ? ` · generated in ${puzzle.generatedAttempts} attempts` : "";
+  const human = puzzle.humanSteps ? ` · human steps ${puzzle.humanSteps}` : "";
   const link = puzzle.url ?? puzzle.id;
-  return `${source} · ${unique}${attempts} · ${link}`;
+  return `${source} · ${unique}${attempts}${human} · ${link}`;
 }
 
 function regionCodeToNumber(code) {
@@ -230,7 +235,7 @@ function renderStatus() {
   const queens = queenIndices();
 
   statusEl.className = "status";
-  if (hintIndex != null && hintMessage) {
+  if (hintAction && hintMessage) {
     statusEl.textContent = hintMessage;
     return;
   }
@@ -277,6 +282,7 @@ function finishSolveIfNeeded() {
     elapsedMs,
     hints: hintCount,
     generatedAttempts: activePuzzle.generatedAttempts ?? null,
+    humanSteps: activePuzzle.humanSteps ?? null,
   });
   saveStats();
 }
@@ -370,33 +376,16 @@ function formatTime(ms) {
 function giveHint() {
   startTimer();
   checkMode = false;
-  const answer = solutionSet(activePuzzle);
-  const wrongQueen = queenIndices().find(idx => !answer.has(idx));
-  if (wrongQueen != null) {
-    hintIndex = wrongQueen;
-    hintCount += 1;
-    hintMessage = "Hint: this square cannot be a queen.";
-    render();
+  const hint = findLogicalHint(activePuzzle, marks, { allowSolutionFallback: false });
+  if (!hint) {
+    hintAction = null;
+    hintMessage = "No simple logical hint found from the current marks. Try placing/removing a mark, or use Show solution.";
+    statusEl.textContent = hintMessage;
     return;
   }
-
-  const blockedAnswer = [...answer].find(idx => marks[idx] === "x");
-  if (blockedAnswer != null) {
-    hintIndex = blockedAnswer;
-    hintCount += 1;
-    hintMessage = "Hint: do not cross out this square.";
-    render();
-    return;
-  }
-
-  const next = solutionIndices(activePuzzle).find(idx => marks[idx] !== "q");
-  if (next == null) {
-    statusEl.textContent = "No hint needed.";
-    return;
-  }
-  hintIndex = next;
+  hintAction = hint;
   hintCount += 1;
-  hintMessage = "Hint: this square belongs in the solution.";
+  hintMessage = hint.message;
   render();
 }
 
@@ -431,31 +420,339 @@ function ensurePuzzleStats(id, create = true) {
   return stats.puzzleStats[id];
 }
 
-async function createRandomPuzzle(size) {
-  const maxAttempts = size >= 9 ? 4500 : 2500;
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    const regions = randomConnectedRegions(size);
-    const result = solveRegions({ size, regions: encodeRegions(regions, size) }, 2);
-    if (result.count === 1) {
-      const solution = indicesToSolution(result.first, size);
-      return {
-        id: `random-${size}-${Date.now()}-${++randomCounter}`,
-        source: "random-generator",
-        day: null,
-        size,
-        generatedAt: new Date().toISOString(),
-        generatedAttempts: attempt,
-        regions: encodeRegions(regions, size),
-        solution,
-        solutionCols: solutionToCols(solution, size),
-        url: null,
-        unique: true,
-        solutionCountChecked: 1,
-      };
-    }
-    if (attempt % 50 === 0) await new Promise(resolve => setTimeout(resolve, 0));
+function findLogicalHint(puzzle, state, options = {}) {
+  const conflict = findMarkedConflict(puzzle, state);
+  if (conflict) return conflict;
+
+  const exclusion = firstQueenExclusion(puzzle, state);
+  if (exclusion) return exclusion;
+
+  const candidates = computeCandidates(puzzle, state);
+  const single = findSingleCandidateHint(puzzle, state, candidates);
+  if (single) return single;
+
+  const intersection = findSetExclusionHint(puzzle, state, candidates, 1);
+  if (intersection) return intersection;
+
+  const pair = findSetExclusionHint(puzzle, state, candidates, 2);
+  if (pair) return pair;
+
+  const triple = findSetExclusionHint(puzzle, state, candidates, 3);
+  if (triple) return triple;
+
+  if (options.allowSolutionFallback) {
+    const answer = solutionSet(puzzle);
+    const wrongQueen = queenIndices(state).find(idx => !answer.has(idx));
+    if (wrongQueen != null) return { idx: wrongQueen, action: "clear", message: "Remove this queen: it is not in the stored solution." };
+    const blockedAnswer = [...answer].find(idx => state[idx] === "x");
+    if (blockedAnswer != null) return { idx: blockedAnswer, action: "clear", message: "Remove this X: this cell is in the stored solution." };
+    const next = solutionIndices(puzzle).find(idx => state[idx] !== "q");
+    if (next != null) return { idx: next, action: "q", message: "Put a queen here: solution fallback." };
   }
-  throw new Error(`No unique ${size}×${size} board found quickly. Try again.`);
+  return null;
+}
+
+function findMarkedConflict(puzzle, state) {
+  const n = puzzle.size;
+  const queens = queenIndices(state);
+  for (let i = 0; i < queens.length; i++) {
+    for (let j = i + 1; j < queens.length; j++) {
+      const a = queens[i], b = queens[j];
+      if (rowOf(a, n) === rowOf(b, n)) return { idx: b, action: "clear", message: `Remove this queen: row ${rowOf(a, n) + 1} already has another queen.` };
+      if (colOf(a, n) === colOf(b, n)) return { idx: b, action: "clear", message: `Remove this queen: column ${colOf(a, n) + 1} already has another queen.` };
+      if (puzzle.regions[a] === puzzle.regions[b]) return { idx: b, action: "clear", message: `Remove this queen: this color region already has another queen.` };
+      if (Math.max(Math.abs(rowOf(a, n) - rowOf(b, n)), Math.abs(colOf(a, n) - colOf(b, n))) <= 1) {
+        return { idx: b, action: "clear", message: "Remove this queen: queens may not touch, even diagonally." };
+      }
+    }
+  }
+  return null;
+}
+
+function firstQueenExclusion(puzzle, state) {
+  const n = puzzle.size;
+  for (const queen of queenIndices(state)) {
+    const reasons = excludedByQueen(puzzle, queen);
+    for (const item of reasons) {
+      if (state[item.idx] === "") {
+        return { idx: item.idx, action: "x", message: `Put X here: ${item.reason}.` };
+      }
+    }
+  }
+  return null;
+}
+
+function excludedByQueen(puzzle, queenIdx) {
+  const n = puzzle.size;
+  const result = [];
+  for (let idx = 0; idx < n * n; idx++) {
+    if (idx === queenIdx) continue;
+    if (rowOf(idx, n) === rowOf(queenIdx, n)) result.push({ idx, reason: `row ${rowOf(queenIdx, n) + 1} already has a queen` });
+    else if (colOf(idx, n) === colOf(queenIdx, n)) result.push({ idx, reason: `column ${colOf(queenIdx, n) + 1} already has a queen` });
+    else if (puzzle.regions[idx] === puzzle.regions[queenIdx]) result.push({ idx, reason: "this color region already has a queen" });
+    else if (Math.max(Math.abs(rowOf(idx, n) - rowOf(queenIdx, n)), Math.abs(colOf(idx, n) - colOf(queenIdx, n))) <= 1) {
+      result.push({ idx, reason: "queens may not touch" });
+    }
+  }
+  return result;
+}
+
+function computeCandidates(puzzle, state) {
+  const n = puzzle.size;
+  const candidates = new Set();
+  const queens = queenIndices(state);
+  for (let idx = 0; idx < n * n; idx++) {
+    if (state[idx] === "x") continue;
+    if (state[idx] === "q") {
+      candidates.add(idx);
+      continue;
+    }
+    let ok = true;
+    for (const queen of queens) {
+      if (rowOf(idx, n) === rowOf(queen, n) || colOf(idx, n) === colOf(queen, n) || puzzle.regions[idx] === puzzle.regions[queen]) {
+        ok = false;
+        break;
+      }
+      if (Math.max(Math.abs(rowOf(idx, n) - rowOf(queen, n)), Math.abs(colOf(idx, n) - colOf(queen, n))) <= 1) {
+        ok = false;
+        break;
+      }
+    }
+    if (ok) candidates.add(idx);
+  }
+  return candidates;
+}
+
+function findSingleCandidateHint(puzzle, state, candidates) {
+  for (const unit of getAllUnits(puzzle)) {
+    if (unit.indices.some(idx => state[idx] === "q")) continue;
+    const possible = unit.indices.filter(idx => candidates.has(idx));
+    if (possible.length === 1 && state[possible[0]] !== "q") {
+      return { idx: possible[0], action: "q", message: `Put a queen here: ${unit.label} has only one legal cell left.` };
+    }
+  }
+  return null;
+}
+
+function findSetExclusionHint(puzzle, state, candidates, setSize) {
+  for (const sourceType of UNIT_TYPES) {
+    const units = getUnitsByType(puzzle, sourceType)
+      .filter(unit => !unit.indices.some(idx => state[idx] === "q"))
+      .map(unit => ({ ...unit, candidates: unit.indices.filter(idx => candidates.has(idx)) }))
+      .filter(unit => unit.candidates.length > 0);
+
+    for (const group of combinations(units, setSize)) {
+      const candidateUnion = unique(group.flatMap(unit => unit.candidates));
+      for (const targetType of UNIT_TYPES) {
+        if (targetType === sourceType) continue;
+        const targetKeys = unique(candidateUnion.map(idx => unitKey(puzzle, idx, targetType)));
+        if (targetKeys.length !== setSize) continue;
+        const targetCells = unique(targetKeys.flatMap(key => unitIndices(puzzle, targetType, key)));
+        const candidateSet = new Set(candidateUnion);
+        const elimination = targetCells.find(idx => !candidateSet.has(idx) && state[idx] === "" && candidates.has(idx));
+        if (elimination != null) {
+          const sourceLabel = group.map(unit => unit.label).join(setSize === 1 ? "" : " + ");
+          const targetLabel = targetKeys.map(key => unitLabel(targetType, key)).join(setSize === 1 ? "" : " + ");
+          const plural = setSize === 1 ? "is" : "are";
+          return {
+            idx: elimination,
+            action: "x",
+            message: `Put X here: all candidates for ${sourceLabel} ${plural} inside ${targetLabel}, so the rest of ${targetLabel} is excluded.`,
+          };
+        }
+      }
+    }
+  }
+  return null;
+}
+
+function getAllUnits(puzzle) {
+  return UNIT_TYPES.flatMap(type => getUnitsByType(puzzle, type));
+}
+
+function getUnitsByType(puzzle, type) {
+  const n = puzzle.size;
+  if (type === "row") return [...Array(n).keys()].map(key => ({ type, key, label: unitLabel(type, key), indices: unitIndices(puzzle, type, key) }));
+  if (type === "col") return [...Array(n).keys()].map(key => ({ type, key, label: unitLabel(type, key), indices: unitIndices(puzzle, type, key) }));
+  return unique([...puzzle.regions]).map(key => ({ type, key, label: unitLabel(type, key), indices: unitIndices(puzzle, type, key) }));
+}
+
+function unitIndices(puzzle, type, key) {
+  const n = puzzle.size;
+  if (type === "row") return [...Array(n).keys()].map(col => key * n + col);
+  if (type === "col") return [...Array(n).keys()].map(row => row * n + key);
+  return [...puzzle.regions].map((region, idx) => region === key ? idx : -1).filter(idx => idx >= 0);
+}
+
+function unitKey(puzzle, idx, type) {
+  const n = puzzle.size;
+  if (type === "row") return rowOf(idx, n);
+  if (type === "col") return colOf(idx, n);
+  return puzzle.regions[idx];
+}
+
+function unitLabel(type, key) {
+  if (type === "row") return `row ${Number(key) + 1}`;
+  if (type === "col") return `column ${Number(key) + 1}`;
+  return `region ${key}`;
+}
+
+function solveByHumanLogic(puzzle) {
+  const state = Array(puzzle.size * puzzle.size).fill("");
+  const steps = [];
+  const maxSteps = puzzle.size * puzzle.size * 3;
+  for (let i = 0; i < maxSteps; i++) {
+    if (isStateSolved(puzzle, state)) return { solved: true, steps };
+    const hint = findLogicalHint(puzzle, state, { allowSolutionFallback: false });
+    if (!hint || hint.action === "clear") return { solved: false, steps };
+    if (state[hint.idx] === hint.action) return { solved: false, steps };
+    state[hint.idx] = hint.action;
+    steps.push(hint);
+  }
+  return { solved: isStateSolved(puzzle, state), steps };
+}
+
+function isStateSolved(puzzle, state) {
+  const answer = solutionSet(puzzle);
+  for (let idx = 0; idx < state.length; idx++) {
+    if (answer.has(idx) && state[idx] !== "q") return false;
+    if (!answer.has(idx) && state[idx] === "q") return false;
+  }
+  return true;
+}
+
+async function createRandomPuzzle(size) {
+  const maxAttempts = size >= 9 ? 9000 : 5200;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const seedSolution = randomQueenSolution(size);
+    if (!seedSolution) continue;
+
+    const regionNumbers = growRegionsFromQueens(size, seedSolution);
+    if (!looksReasonableRegionLayout(regionNumbers, size)) continue;
+
+    const regions = encodeRegions(regionNumbers, size);
+    const result = solveRegions({ size, regions }, 2);
+    if (result.count !== 1) {
+      if (attempt % 25 === 0) await new Promise(resolve => setTimeout(resolve, 0));
+      continue;
+    }
+
+    const solution = indicesToSolution(result.first, size);
+    const puzzle = {
+      id: `random-${size}-${Date.now()}-${++randomCounter}`,
+      source: "random-generator-v2",
+      day: null,
+      size,
+      generatedAt: new Date().toISOString(),
+      generatedAttempts: attempt,
+      regions,
+      solution,
+      solutionCols: solutionToCols(solution, size),
+      url: null,
+      unique: true,
+      solutionCountChecked: 1,
+    };
+    const human = solveByHumanLogic(puzzle);
+    if (human.solved && human.steps.length >= size) {
+      puzzle.humanSteps = human.steps.length;
+      puzzle.firstHint = human.steps[0]?.message ?? null;
+      return puzzle;
+    }
+
+    if (attempt % 25 === 0) await new Promise(resolve => setTimeout(resolve, 0));
+  }
+  throw new Error(`No human-solvable unique ${size}×${size} board found quickly. Try again.`);
+}
+
+function randomQueenSolution(size) {
+  const rows = [];
+  function backtrack(row, usedCols) {
+    if (row === size) return true;
+    const cols = shuffle([...Array(size).keys()]);
+    for (const col of cols) {
+      if (usedCols.has(col)) continue;
+      if (row > 0 && Math.abs(rows[row - 1] - col) <= 1) continue;
+      rows[row] = col;
+      usedCols.add(col);
+      if (backtrack(row + 1, usedCols)) return true;
+      usedCols.delete(col);
+      rows.pop();
+    }
+    return false;
+  }
+  return backtrack(0, new Set()) ? rows.map((col, row) => row * size + col) : null;
+}
+
+function growRegionsFromQueens(size, queenCells) {
+  const total = size * size;
+  const regions = Array(total).fill(-1);
+  const counts = Array(size).fill(0);
+  const targets = balancedRegionTargets(size);
+
+  queenCells.forEach((idx, region) => {
+    regions[idx] = region;
+    counts[region] = 1;
+  });
+
+  let remaining = total - size;
+  while (remaining > 0) {
+    const candidates = growthCandidates(regions, counts, targets, size, queenCells);
+    if (!candidates.length) return randomConnectedRegions(size);
+    const selected = weightedChoice(candidates);
+    regions[selected.idx] = selected.region;
+    counts[selected.region] += 1;
+    remaining -= 1;
+  }
+  return regions;
+}
+
+function balancedRegionTargets(size) {
+  const total = size * size;
+  const base = Math.floor(total / size);
+  const targets = Array(size).fill(base);
+  let remainder = total - base * size;
+  for (const region of shuffle([...Array(size).keys()])) {
+    if (remainder <= 0) break;
+    targets[region] += 1;
+    remainder -= 1;
+  }
+  for (let i = 0; i < targets.length; i++) {
+    targets[i] += Math.floor(Math.random() * 3) - 1;
+    targets[i] = Math.max(3, Math.min(size + 4, targets[i]));
+  }
+  return normalizeTargets(targets, total);
+}
+
+function normalizeTargets(targets, total) {
+  while (targets.reduce((a, b) => a + b, 0) < total) targets[Math.floor(Math.random() * targets.length)] += 1;
+  while (targets.reduce((a, b) => a + b, 0) > total) {
+    const i = Math.floor(Math.random() * targets.length);
+    if (targets[i] > 3) targets[i] -= 1;
+  }
+  return targets;
+}
+
+function growthCandidates(regions, counts, targets, size, queenCells) {
+  const total = size * size;
+  const candidates = [];
+  for (let idx = 0; idx < total; idx++) {
+    if (regions[idx] !== -1) continue;
+    const neighborRegions = unique(assignedNeighborRegions(regions, size, idx));
+    for (const region of neighborRegions) {
+      const seed = queenCells[region];
+      const distance = manhattan(idx, seed, size);
+      const targetPressure = Math.max(1, targets[region] - counts[region] + 1);
+      const overTargetPenalty = counts[region] >= targets[region] ? 0.15 : 1;
+      const compactness = 1 / Math.max(1, distance);
+      const jitter = 0.65 + Math.random() * 0.7;
+      candidates.push({
+        idx,
+        region,
+        weight: targetPressure * overTargetPenalty * compactness * jitter,
+      });
+    }
+  }
+  return candidates;
 }
 
 function randomConnectedRegions(size) {
@@ -477,6 +774,43 @@ function randomConnectedRegions(size) {
     remaining -= 1;
   }
   return regions;
+}
+
+function looksReasonableRegionLayout(regions, size) {
+  const counts = Array(size).fill(0);
+  for (const region of regions) counts[region] += 1;
+  if (counts.some(count => count < 3 || count > size + 5)) return false;
+  if (regionBoundaryCount(regions, size) < size * 7) return false;
+  const rowRuns = maxRun(regions, size, "row");
+  const colRuns = maxRun(regions, size, "col");
+  return rowRuns < size && colRuns < size;
+}
+
+function regionBoundaryCount(regions, size) {
+  let boundaries = 0;
+  for (let row = 0; row < size; row++) {
+    for (let col = 0; col < size; col++) {
+      const idx = row * size + col;
+      if (col + 1 < size && regions[idx] !== regions[idx + 1]) boundaries += 1;
+      if (row + 1 < size && regions[idx] !== regions[idx + size]) boundaries += 1;
+    }
+  }
+  return boundaries;
+}
+
+function maxRun(regions, size, direction) {
+  let best = 1;
+  for (let outer = 0; outer < size; outer++) {
+    let run = 1;
+    for (let inner = 1; inner < size; inner++) {
+      const prev = direction === "row" ? outer * size + inner - 1 : (inner - 1) * size + outer;
+      const idx = direction === "row" ? outer * size + inner : inner * size + outer;
+      if (regions[idx] === regions[prev]) run += 1;
+      else run = 1;
+      best = Math.max(best, run);
+    }
+  }
+  return best;
 }
 
 function assignedNeighborRegions(regions, size, idx) {
@@ -547,6 +881,50 @@ function solutionToCols(solution, size) {
   return cols;
 }
 
+function rowOf(idx, size) {
+  return Math.floor(idx / size);
+}
+
+function colOf(idx, size) {
+  return idx % size;
+}
+
+function manhattan(a, b, size) {
+  return Math.abs(rowOf(a, size) - rowOf(b, size)) + Math.abs(colOf(a, size) - colOf(b, size));
+}
+
+function unique(values) {
+  return [...new Set(values)];
+}
+
+function weightedChoice(items) {
+  const total = items.reduce((sum, item) => sum + item.weight, 0);
+  let pick = Math.random() * total;
+  for (const item of items) {
+    pick -= item.weight;
+    if (pick <= 0) return item;
+  }
+  return items[items.length - 1];
+}
+
+function combinations(items, size) {
+  if (size === 1) return items.map(item => [item]);
+  const result = [];
+  function walk(start, combo) {
+    if (combo.length === size) {
+      result.push([...combo]);
+      return;
+    }
+    for (let i = start; i <= items.length - (size - combo.length); i++) {
+      combo.push(items[i]);
+      walk(i + 1, combo);
+      combo.pop();
+    }
+  }
+  walk(0, []);
+  return result;
+}
+
 function shuffle(values) {
   const copy = [...values];
   for (let i = copy.length - 1; i > 0; i--) {
@@ -565,7 +943,7 @@ clearButton.addEventListener("click", () => {
   marks = Array(activePuzzle.size * activePuzzle.size).fill("");
   showSolution = false;
   checkMode = false;
-  hintIndex = null;
+  hintAction = null;
   hintCount = 0;
   hintMessage = "";
   solvedLogged = false;
@@ -578,7 +956,7 @@ clearButton.addEventListener("click", () => {
 checkButton.addEventListener("click", () => {
   startTimer();
   checkMode = !checkMode;
-  hintIndex = null;
+  hintAction = null;
   hintMessage = "";
   checkButton.textContent = checkMode ? "Hide check" : "Check";
   render();
@@ -616,7 +994,7 @@ randomButton.addEventListener("click", async () => {
   const oldText = randomButton.textContent;
   randomButton.textContent = "Generating…";
   statusEl.className = "status";
-  statusEl.textContent = `Searching for a unique ${size}×${size} random board…`;
+  statusEl.textContent = `Searching for a unique, human-solvable ${size}×${size} random board…`;
   try {
     const puzzle = await createRandomPuzzle(size);
     const optionValue = "__random__";
@@ -626,7 +1004,7 @@ randomButton.addEventListener("click", async () => {
       option.value = optionValue;
       selectEl.prepend(option);
     }
-    option.textContent = `Random ${size}×${size} · ${puzzle.generatedAttempts} attempts`;
+    option.textContent = `Random ${size}×${size} · ${puzzle.generatedAttempts} attempts · ${puzzle.humanSteps} steps`;
     loadPuzzle(puzzle, optionValue);
   } catch (error) {
     statusEl.className = "status bad";
