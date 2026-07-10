@@ -1,0 +1,11 @@
+{
+  "name": "queens-archive",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "serve": "python3 -m http.server 8080",
+    "import:local": "node tools/import-zipgame-queens.mjs local \"Vlozeny text.txt\" 583 --out src/puzzles.js",
+    "import:archive": "node tools/import-zipgame-queens.mjs scrape 583 801 --out src/puzzles.js"
+  }
+}
