@@ -1,57 +1,554 @@
 import { PUZZLES } from "./puzzles.js";
 
-const COLORS=["#fca5a5","#fdba74","#fde68a","#86efac","#67e8f9","#93c5fd","#c4b5fd","#f0abfc","#f9a8d4","#d9f99d","#a7f3d0","#bfdbfe","#ddd6fe","#fecdd3","#e2e8f0"];
-const ALPHABET="0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
-const STORAGE_KEY="queens-archive-stats:v3";
-const TRANSFORMS=[
- ["identity",(r,c,n)=>[r,c]],["rotate 90",(r,c,n)=>[c,n-1-r]],["rotate 180",(r,c,n)=>[n-1-r,n-1-c]],["rotate 270",(r,c,n)=>[n-1-c,r]],
- ["mirror horizontal",(r,c,n)=>[r,n-1-c]],["mirror vertical",(r,c,n)=>[n-1-r,c]],["transpose",(r,c)=>[c,r]],["anti-transpose",(r,c,n)=>[n-1-c,n-1-r]]
+const COLORS = ["#fca5a5", "#fdba74", "#fde68a", "#86efac", "#67e8f9", "#93c5fd", "#c4b5fd", "#f0abfc", "#f9a8d4", "#d9f99d", "#a7f3d0", "#bfdbfe", "#ddd6fe", "#fecdd3", "#e2e8f0"];
+const ALPHABET = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+const STORAGE_KEY = "queens-archive-stats:v4";
+const TRANSFORMS = [
+  ["identity", (r, c) => [r, c]],
+  ["rotate 90", (r, c, n) => [c, n - 1 - r]],
+  ["rotate 180", (r, c, n) => [n - 1 - r, n - 1 - c]],
+  ["rotate 270", (r, c, n) => [n - 1 - c, r]],
+  ["mirror horizontal", (r, c, n) => [r, n - 1 - c]],
+  ["mirror vertical", (r, c, n) => [n - 1 - r, c]],
+  ["transpose", (r, c) => [c, r]],
+  ["anti-transpose", (r, c, n) => [n - 1 - c, n - 1 - r]],
 ];
-const $=s=>document.querySelector(s), boardEl=$("#board"),selectEl=$("#puzzleSelect"),randomSizeEl=$("#randomSize"),randomButton=$("#randomButton"),statusEl=$("#status"),metaEl=$("#meta"),statsEl=$("#stats"),timerEl=$("#timer"),ratingPanel=$("#ratingPanel"),clearButton=$("#clearButton"),checkButton=$("#checkButton"),hintButton=$("#hintButton"),solutionButton=$("#solutionButton"),exportStatsButton=$("#exportStatsButton");
-let activePuzzle=PUZZLES[0],marks=[],showSolution=false,checkMode=false,hint=null,hintCount=0,solvedLogged=false,timerStartedAt=null,elapsed=0,timerHandle=null,stats=loadStats(),randomCounter=0;
-const rowOf=(i,n)=>Math.floor(i/n),colOf=(i,n)=>i%n,idxOf=(r,c,n)=>r*n+c;
-const queenIndices=(state=marks)=>state.map((v,i)=>v==="q"?i:-1).filter(i=>i>=0);
-const solutionSet=p=>new Set([...p.solution].map((v,i)=>v==="Q"?i:-1).filter(i=>i>=0));
-const unique=a=>[...new Set(a)];
 
-function populateSelect(){selectEl.innerHTML="";for(const p of PUZZLES){const o=document.createElement("option");o.value=p.id;o.textContent=`Day ${p.day} · ${p.size}×${p.size}`;selectEl.append(o)}}
-function loadPuzzle(p,value=p.id){activePuzzle=p;marks=Array(p.size*p.size).fill("");showSolution=checkMode=false;hint=null;hintCount=0;solvedLogged=false;solutionButton.textContent="Show solution";checkButton.textContent="Check";resetTimer();if([...selectEl.options].some(o=>o.value===value))selectEl.value=value;render()}
-function render(){const n=activePuzzle.size;boardEl.style.gridTemplateColumns=`repeat(${n},1fr)`;boardEl.style.gridTemplateRows=`repeat(${n},1fr)`;boardEl.innerHTML="";const errors=findErrors(checkMode),answer=solutionSet(activePuzzle);for(let r=0;r<n;r++)for(let c=0;c<n;c++){const i=idxOf(r,c,n),region=activePuzzle.regions[i],cell=document.createElement("button");cell.type="button";cell.className="cell";cell.dataset.state=marks[i];cell.style.background=COLORS[regionNumber(region)%COLORS.length];applyBorders(cell,r,c,i,region,n);if(errors.has(i))cell.classList.add("error");if(hint?.target===i){cell.classList.add("hint-target");cell.dataset.hintAction=hint.action}if(hint?.causes?.includes(i))cell.classList.add("hint-cause");if(showSolution&&answer.has(i)&&marks[i]!=="q")cell.classList.add("solution");cell.addEventListener("click",()=>{startTimer();marks[i]=marks[i]===""?"x":marks[i]==="x"?"q":"";hint=null;checkMode=false;render()});boardEl.append(cell)}renderStatus();renderStats();renderRating();metaEl.textContent=metaText(activePuzzle)}
-function applyBorders(cell,r,c,i,region,n){const thick="4px",thin="1px";cell.style.borderTopWidth=r===0||activePuzzle.regions[i-n]!==region?thick:thin;cell.style.borderBottomWidth=r===n-1||activePuzzle.regions[i+n]!==region?thick:thin;cell.style.borderLeftWidth=c===0||activePuzzle.regions[i-1]!==region?thick:thin;cell.style.borderRightWidth=c===n-1||activePuzzle.regions[i+1]!==region?thick:thin}
-function regionNumber(x){const i=ALPHABET.indexOf(x);return i>=0?i:x.codePointAt(0)}
-function metaText(p){return `${p.source??"archive"}${p.templateDay?` · template day ${p.templateDay}`:""}${p.transformName?` · ${p.transformName}`:""}`}
+const $ = selector => document.querySelector(selector);
+const boardEl = $("#board");
+const selectEl = $("#puzzleSelect");
+const randomSizeEl = $("#randomSize");
+const randomButton = $("#randomButton");
+const statusEl = $("#status");
+const metaEl = $("#meta");
+const statsEl = $("#stats");
+const timerEl = $("#timer");
+const ratingPanel = $("#ratingPanel");
+const clearButton = $("#clearButton");
+const checkButton = $("#checkButton");
+const hintButton = $("#hintButton");
+const solutionButton = $("#solutionButton");
+const exportStatsButton = $("#exportStatsButton");
 
-function findErrors(checkSolution=false){const n=activePuzzle.size,q=queenIndices(),bad=new Set(),rows=new Map(),cols=new Map(),regions=new Map(),answer=solutionSet(activePuzzle);for(const i of q){duplicate(rows,rowOf(i,n),i,bad);duplicate(cols,colOf(i,n),i,bad);duplicate(regions,activePuzzle.regions[i],i,bad);if(checkSolution&&!answer.has(i))bad.add(i)}for(let a=0;a<q.length;a++)for(let b=a+1;b<q.length;b++)if(Math.max(Math.abs(rowOf(q[a],n)-rowOf(q[b],n)),Math.abs(colOf(q[a],n)-colOf(q[b],n)))<=1){bad.add(q[a]);bad.add(q[b])}if(checkSolution)for(const i of answer)if(marks[i]==="x")bad.add(i);return bad}
-function duplicate(map,key,i,bad){if(map.has(key)){bad.add(map.get(key));bad.add(i)}else map.set(key,i)}
-function solved(){const a=solutionSet(activePuzzle);return marks.every((v,i)=>a.has(i)?v==="q":v!=="q")}
-function renderStatus(){statusEl.className="status";if(hint){statusEl.innerHTML=`<span class="technique">${escapeHtml(hint.technique)}</span>${escapeHtml(hint.message)}`;return}const e=findErrors(false);if(e.size){statusEl.classList.add("bad");statusEl.textContent="Conflict: queens share a row, column, region, or touch.";return}if(checkMode&&findErrors(true).size){statusEl.classList.add("bad");statusEl.textContent="Some marks contradict the stored solution.";return}if(solved()){statusEl.classList.add("ok");statusEl.textContent=`Solved in ${formatTime(currentMs())} · ${hintCount} hints`;finishSolve();return}statusEl.textContent=`${queenIndices().length}/${activePuzzle.size} queens · ${hintCount} hints`}
-function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"}[c]))}
+let activePuzzle = PUZZLES[0];
+let marks = [];
+let showSolution = false;
+let checkMode = false;
+let hint = null;
+let hintCount = 0;
+let solvedLogged = false;
+let timerStartedAt = null;
+let elapsed = 0;
+let timerHandle = null;
+let stats = loadStats();
+let randomCounter = 0;
+const easyPoolCache = new Map();
 
-function nextHumanStep(p,state){return conflictStep(p,state)||queenExclusionStep(p,state)||singleStep(p,state)||lockedCandidatesStep(p,state)||commonAttackStep(p,state)||hallSetStep(p,state,2)||hallSetStep(p,state,3)||null}
-function conflictStep(p,state){const n=p.size,q=queenIndices(state);for(let a=0;a<q.length;a++)for(let b=a+1;b<q.length;b++){const x=q[a],y=q[b];if(rowOf(x,n)===rowOf(y,n))return step("Conflict",y,"clear",[x],`Remove this queen: row ${rowOf(x,n)+1} already has one.`);if(colOf(x,n)===colOf(y,n))return step("Conflict",y,"clear",[x],`Remove this queen: column ${colOf(x,n)+1} already has one.`);if(p.regions[x]===p.regions[y])return step("Conflict",y,"clear",[x],"Remove this queen: its color region already has one.");if(Math.max(Math.abs(rowOf(x,n)-rowOf(y,n)),Math.abs(colOf(x,n)-colOf(y,n)))<=1)return step("Touching queens",y,"clear",[x],"Remove this queen: queens may not touch, even diagonally.")}return null}
-function queenExclusionStep(p,state){for(const q of queenIndices(state))for(let i=0;i<state.length;i++)if(state[i]===""&&attacks(p,q,i)){let reason=rowOf(q,p.size)===rowOf(i,p.size)?`row ${rowOf(q,p.size)+1}`:colOf(q,p.size)===colOf(i,p.size)?`column ${colOf(q,p.size)+1}`:p.regions[q]===p.regions[i]?"the same color region":"an adjacent square";return step("Queen exclusion",i,"x",[q],`Put X here: the highlighted queen rules out ${reason}.`)}return null}
-function candidateSet(p,state){const q=queenIndices(state),set=new Set();for(let i=0;i<state.length;i++){if(state[i]==="x")continue;if(state[i]==="q"||q.every(x=>!attacks(p,x,i)))set.add(i)}return set}
-function units(p){const n=p.size,out=[];for(let r=0;r<n;r++)out.push({type:"row",key:r,label:`row ${r+1}`,cells:[...Array(n)].map((_,c)=>idxOf(r,c,n))});for(let c=0;c<n;c++)out.push({type:"column",key:c,label:`column ${c+1}`,cells:[...Array(n)].map((_,r)=>idxOf(r,c,n))});for(const reg of unique([...p.regions]))out.push({type:"region",key:reg,label:`${colorName(reg)} region`,cells:[...p.regions].map((v,i)=>v===reg?i:-1).filter(i=>i>=0)});return out}
-function colorName(reg){return `color ${regionNumber(reg)+1}`}
-function singleStep(p,state){const cand=candidateSet(p,state);for(const u of units(p)){if(u.cells.some(i=>state[i]==="q"))continue;const possible=u.cells.filter(i=>cand.has(i));if(possible.length===1)return step("Single candidate",possible[0],"q",possible,`Place a queen here: ${u.label} has only one legal square left.`)}return null}
-function lockedCandidatesStep(p,state){const cand=candidateSet(p,state),all=units(p);for(const source of all){if(source.cells.some(i=>state[i]==="q"))continue;const poss=source.cells.filter(i=>cand.has(i));if(poss.length<2)continue;for(const target of all){if(target.type===source.type)continue;if(!poss.every(i=>target.cells.includes(i)))continue;const elim=target.cells.find(i=>state[i]===""&&cand.has(i)&&!poss.includes(i));if(elim!=null)return step("Locked candidates",elim,"x",poss,`All candidates for ${source.label} lie in ${target.label}; the rest of ${target.label} is excluded.`)}}return null}
-function commonAttackStep(p,state){const cand=candidateSet(p,state);for(const u of units(p)){if(u.cells.some(i=>state[i]==="q"))continue;const poss=u.cells.filter(i=>cand.has(i));if(poss.length<2||poss.length>5)continue;for(let target=0;target<state.length;target++){if(state[target]!==""||poss.includes(target)||!cand.has(target))continue;if(poss.every(x=>attacks(p,x,target)))return step("Common attack",target,"x",poss,`Whichever candidate holds the queen in ${u.label}, it attacks this square.`)}}return null}
-function hallSetStep(p,state,k){const cand=candidateSet(p,state);for(const type of ["row","column","region"]){const groupUnits=units(p).filter(u=>u.type===type&&!u.cells.some(i=>state[i]==="q")).map(u=>({...u,poss:u.cells.filter(i=>cand.has(i))})).filter(u=>u.poss.length>0&&u.poss.length<=k+1);for(const group of combinations(groupUnits,k)){const union=unique(group.flatMap(u=>u.poss));if(union.length!==k)continue;for(const target of units(p).filter(u=>u.type!==type)){const within=union.filter(i=>target.cells.includes(i));if(within.length!==k)continue;const elim=target.cells.find(i=>state[i]===""&&cand.has(i)&&!union.includes(i));if(elim!=null)return step(k===2?"Locked pair":"Locked triple",elim,"x",union,`${group.map(u=>u.label).join(" and ")} are confined to these ${k} squares, so this square in ${target.label} is excluded.`)}}}return null}
-function attacks(p,a,b){if(a===b)return false;const n=p.size;return rowOf(a,n)===rowOf(b,n)||colOf(a,n)===colOf(b,n)||p.regions[a]===p.regions[b]||Math.max(Math.abs(rowOf(a,n)-rowOf(b,n)),Math.abs(colOf(a,n)-colOf(b,n)))<=1}
-function step(technique,target,action,causes,message){return{technique,target,action,causes:unique(causes),message}}
-function combinations(arr,k){const out=[];function go(start,pick){if(pick.length===k){out.push([...pick]);return}for(let i=start;i<arr.length;i++){pick.push(arr[i]);go(i+1,pick);pick.pop()}}go(0,[]);return out}
-function giveHint(){startTimer();checkMode=false;hint=nextHumanStep(activePuzzle,marks);if(!hint){statusEl.className="status bad";statusEl.innerHTML='<span class="technique">No supported deduction</span>This position may need a technique not yet implemented; no answer was revealed.';return}hintCount++;render()}
+const rowOf = (index, size) => Math.floor(index / size);
+const colOf = (index, size) => index % size;
+const idxOf = (row, col, size) => row * size + col;
+const queenIndices = (state = marks) => state.map((value, index) => value === "q" ? index : -1).filter(index => index >= 0);
+const solutionSet = puzzle => new Set([...puzzle.solution].map((value, index) => value === "Q" ? index : -1).filter(index => index >= 0));
+const unique = values => [...new Set(values)];
 
-function transformPuzzle(base){const n=base.size,[name,fn]=TRANSFORMS[Math.floor(Math.random()*TRANSFORMS.length)],regions=Array(n*n),solution=Array(n*n).fill(".");for(let i=0;i<n*n;i++){const[r,c]=fn(rowOf(i,n),colOf(i,n),n),t=idxOf(r,c,n);regions[t]=base.regions[i];if(base.solution[i]==="Q")solution[t]="Q"}const labels=unique(regions),shuffled=shuffle(ALPHABET.slice(0,labels.length).split("")),map=new Map(labels.map((x,i)=>[x,shuffled[i]]));return{id:`random-${n}-${Date.now()}-${++randomCounter}`,source:"archive shuffle",templateDay:base.day,transformName:name,size:n,regions:regions.map(x=>map.get(x)).join(""),solution:solution.join(""),unique:true}}
-function createRandom(size){const pool=PUZZLES.filter(p=>p.size===size&&p.unique!==false);if(!pool.length)throw new Error(`No ${size}×${size} templates loaded.`);const withOpening=shuffle(pool).find(p=>nextHumanStep(p,Array(size*size).fill("")))??pool[Math.floor(Math.random()*pool.length)];return transformPuzzle(withOpening)}
-function shuffle(a){const x=[...a];for(let i=x.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[x[i],x[j]]=[x[j],x[i]]}return x}
+function populateSelect() {
+  selectEl.innerHTML = "";
+  for (const puzzle of PUZZLES) {
+    const option = document.createElement("option");
+    option.value = puzzle.id;
+    option.textContent = `Day ${puzzle.day} · ${puzzle.size}×${puzzle.size}`;
+    selectEl.append(option);
+  }
+}
 
-function startTimer(){if(solvedLogged||timerStartedAt!=null)return;timerStartedAt=performance.now();timerHandle=setInterval(renderTimer,250);renderTimer()}function stopTimer(){if(timerStartedAt==null)return;elapsed+=performance.now()-timerStartedAt;timerStartedAt=null;clearInterval(timerHandle);timerHandle=null;renderTimer()}function resetTimer(){timerStartedAt=null;elapsed=0;clearInterval(timerHandle);timerHandle=null;renderTimer()}function currentMs(){return elapsed+(timerStartedAt==null?0:performance.now()-timerStartedAt)}function renderTimer(){timerEl.textContent=formatTime(currentMs())}function formatTime(ms){const s=Math.floor(ms/1000),m=Math.floor(s/60);return m<60?`${String(m).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`:`${Math.floor(m/60)}:${String(m%60).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`}
-function loadStats(){try{return JSON.parse(localStorage.getItem(STORAGE_KEY))||{sessions:[],puzzles:{}}}catch{return{sessions:[],puzzles:{}}}}function saveStats(){localStorage.setItem(STORAGE_KEY,JSON.stringify(stats))}function entry(id,create=true){if(!stats.puzzles)stats.puzzles={};if(!stats.puzzles[id]&&create)stats.puzzles[id]={solved:0,best:null,playRating:null,visualRating:null};return stats.puzzles[id]}
-function finishSolve(){if(solvedLogged)return;solvedLogged=true;stopTimer();const e=entry(activePuzzle.id);e.solved++;e.best=e.best==null?currentMs():Math.min(e.best,currentMs());stats.sessions.push({id:activePuzzle.id,at:new Date().toISOString(),ms:currentMs(),hints:hintCount});saveStats();renderRating()}
-function renderStats(){const e=entry(activePuzzle.id,false);statsEl.textContent=`Best: ${e?.best==null?"—":formatTime(e.best)} · solved: ${e?.solved??0} · all solves: ${stats.sessions?.length??0}`}
-function renderRating(){const e=entry(activePuzzle.id,false);ratingPanel.hidden=!(solvedLogged||e);if(ratingPanel.hidden)return;const x=entry(activePuzzle.id);ratingPanel.innerHTML="";ratingPanel.append(ratingRow("Play",x,"playRating"),ratingRow("Visual",x,"visualRating"))}
-function ratingRow(label,e,key){const row=document.createElement("div");row.className="rating-row";row.innerHTML=`<span>${label}</span>`;const stars=document.createElement("div");stars.className="stars";for(let i=1;i<=5;i++){const b=document.createElement("button");b.className=`star${i<=(e[key]??0)?" active":""}`;b.textContent="★";b.onclick=()=>{e[key]=i;saveStats();renderRating()};stars.append(b)}row.append(stars);return row}
+function loadPuzzle(puzzle, value = puzzle.id) {
+  activePuzzle = puzzle;
+  marks = Array(puzzle.size * puzzle.size).fill("");
+  showSolution = false;
+  checkMode = false;
+  hint = null;
+  hintCount = 0;
+  solvedLogged = false;
+  solutionButton.textContent = "Show solution";
+  checkButton.textContent = "Check";
+  resetTimer();
+  if ([...selectEl.options].some(option => option.value === value)) selectEl.value = value;
+  render();
+}
 
-selectEl.onchange=()=>loadPuzzle(PUZZLES.find(p=>p.id===selectEl.value)??PUZZLES[0]);clearButton.onclick=()=>loadPuzzle(activePuzzle,selectEl.value);checkButton.onclick=()=>{startTimer();checkMode=!checkMode;hint=null;checkButton.textContent=checkMode?"Hide check":"Check";render()};hintButton.onclick=giveHint;solutionButton.onclick=()=>{startTimer();showSolution=!showSolution;solutionButton.textContent=showSolution?"Hide solution":"Show solution";render()};randomButton.onclick=()=>{try{const p=createRandom(Number(randomSizeEl.value)),value="__random__";let o=[...selectEl.options].find(x=>x.value===value);if(!o){o=document.createElement("option");o.value=value;selectEl.prepend(o)}o.textContent=`Random ${p.size}×${p.size} · day ${p.templateDay}`;loadPuzzle(p,value)}catch(e){statusEl.className="status bad";statusEl.textContent=e.message}};exportStatsButton.onclick=()=>{const blob=new Blob([JSON.stringify(stats,null,2)],{type:"application/json"}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download="queens-stats.json";a.click();URL.revokeObjectURL(url)};
-populateSelect();loadPuzzle(PUZZLES[0]);
+function render() {
+  const size = activePuzzle.size;
+  boardEl.style.gridTemplateColumns = `repeat(${size}, 1fr)`;
+  boardEl.style.gridTemplateRows = `repeat(${size}, 1fr)`;
+  boardEl.innerHTML = "";
+  const errors = findErrors(checkMode);
+  const answer = solutionSet(activePuzzle);
+
+  for (let row = 0; row < size; row++) {
+    for (let col = 0; col < size; col++) {
+      const index = idxOf(row, col, size);
+      const region = activePuzzle.regions[index];
+      const cell = document.createElement("button");
+      cell.type = "button";
+      cell.className = "cell";
+      cell.dataset.state = marks[index];
+      cell.style.background = COLORS[regionNumber(region) % COLORS.length];
+      applyBorders(cell, row, col, index, region, size);
+      if (errors.has(index)) cell.classList.add("error");
+      if (hint?.target === index) {
+        cell.classList.add("hint-target");
+        cell.dataset.hintAction = hint.action;
+      }
+      if (hint?.causes?.includes(index)) cell.classList.add("hint-cause");
+      if (showSolution && answer.has(index) && marks[index] !== "q") cell.classList.add("solution");
+      cell.addEventListener("click", () => {
+        startTimer();
+        marks[index] = marks[index] === "" ? "x" : marks[index] === "x" ? "q" : "";
+        hint = null;
+        checkMode = false;
+        render();
+      });
+      boardEl.append(cell);
+    }
+  }
+
+  renderStatus();
+  renderStats();
+  renderRating();
+  metaEl.textContent = metaText(activePuzzle);
+}
+
+function applyBorders(cell, row, col, index, region, size) {
+  const thick = "4px";
+  const thin = "1px";
+  cell.style.borderTopWidth = row === 0 || activePuzzle.regions[index - size] !== region ? thick : thin;
+  cell.style.borderBottomWidth = row === size - 1 || activePuzzle.regions[index + size] !== region ? thick : thin;
+  cell.style.borderLeftWidth = col === 0 || activePuzzle.regions[index - 1] !== region ? thick : thin;
+  cell.style.borderRightWidth = col === size - 1 || activePuzzle.regions[index + 1] !== region ? thick : thin;
+}
+
+function regionNumber(value) {
+  const index = ALPHABET.indexOf(value);
+  return index >= 0 ? index : value.codePointAt(0);
+}
+
+function metaText(puzzle) {
+  const source = puzzle.source ?? "archive";
+  const template = puzzle.templateDay ? ` · template day ${puzzle.templateDay}` : "";
+  const transform = puzzle.transformName ? ` · ${puzzle.transformName}` : "";
+  const path = puzzle.humanSteps ? ` · ${puzzle.humanSteps} basic steps` : "";
+  return `${source}${template}${transform}${path}`;
+}
+
+function findErrors(checkSolution = false) {
+  const size = activePuzzle.size;
+  const queens = queenIndices();
+  const bad = new Set();
+  const rows = new Map();
+  const cols = new Map();
+  const regions = new Map();
+  const answer = solutionSet(activePuzzle);
+  for (const index of queens) {
+    duplicate(rows, rowOf(index, size), index, bad);
+    duplicate(cols, colOf(index, size), index, bad);
+    duplicate(regions, activePuzzle.regions[index], index, bad);
+    if (checkSolution && !answer.has(index)) bad.add(index);
+  }
+  for (let a = 0; a < queens.length; a++) {
+    for (let b = a + 1; b < queens.length; b++) {
+      if (Math.max(Math.abs(rowOf(queens[a], size) - rowOf(queens[b], size)), Math.abs(colOf(queens[a], size) - colOf(queens[b], size))) <= 1) {
+        bad.add(queens[a]);
+        bad.add(queens[b]);
+      }
+    }
+  }
+  if (checkSolution) for (const index of answer) if (marks[index] === "x") bad.add(index);
+  return bad;
+}
+
+function duplicate(map, key, index, bad) {
+  if (map.has(key)) {
+    bad.add(map.get(key));
+    bad.add(index);
+  } else map.set(key, index);
+}
+
+function solved() {
+  return isSolvedState(activePuzzle, marks);
+}
+
+function isSolvedState(puzzle, state) {
+  const answer = solutionSet(puzzle);
+  return state.every((value, index) => answer.has(index) ? value === "q" : value !== "q");
+}
+
+function renderStatus() {
+  statusEl.className = "status";
+  if (hint) {
+    statusEl.innerHTML = `<span class="technique">${escapeHtml(hint.technique)}</span>${escapeHtml(hint.message)}`;
+    return;
+  }
+  const errors = findErrors(false);
+  if (errors.size) {
+    statusEl.classList.add("bad");
+    statusEl.textContent = "Conflict: queens share a row, column, region, or touch.";
+    return;
+  }
+  if (checkMode && findErrors(true).size) {
+    statusEl.classList.add("bad");
+    statusEl.textContent = "Some marks contradict the stored solution.";
+    return;
+  }
+  if (solved()) {
+    statusEl.classList.add("ok");
+    statusEl.textContent = `Solved in ${formatTime(currentMs())} · ${hintCount} hints`;
+    finishSolve();
+    return;
+  }
+  statusEl.textContent = `${queenIndices().length}/${activePuzzle.size} queens · ${hintCount} hints`;
+}
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#039;" }[char]));
+}
+
+// Normal mode deliberately stops at techniques a player can reasonably scan on a phone.
+function nextHumanStep(puzzle, state) {
+  return conflictStep(puzzle, state)
+    || queenExclusionStep(puzzle, state)
+    || singleStep(puzzle, state)
+    || lockedCandidatesStep(puzzle, state)
+    || null;
+}
+
+function conflictStep(puzzle, state) {
+  const size = puzzle.size;
+  const queens = queenIndices(state);
+  for (let a = 0; a < queens.length; a++) {
+    for (let b = a + 1; b < queens.length; b++) {
+      const first = queens[a];
+      const second = queens[b];
+      if (rowOf(first, size) === rowOf(second, size)) return step("Conflict", second, "clear", [first], `Remove this queen: row ${rowOf(first, size) + 1} already has one.`);
+      if (colOf(first, size) === colOf(second, size)) return step("Conflict", second, "clear", [first], `Remove this queen: column ${colOf(first, size) + 1} already has one.`);
+      if (puzzle.regions[first] === puzzle.regions[second]) return step("Conflict", second, "clear", [first], "Remove this queen: its color region already has one.");
+      if (Math.max(Math.abs(rowOf(first, size) - rowOf(second, size)), Math.abs(colOf(first, size) - colOf(second, size))) <= 1) return step("Touching queens", second, "clear", [first], "Remove this queen: queens may not touch, even diagonally.");
+    }
+  }
+  return null;
+}
+
+function queenExclusionStep(puzzle, state) {
+  for (const queen of queenIndices(state)) {
+    for (let index = 0; index < state.length; index++) {
+      if (state[index] !== "" || !attacks(puzzle, queen, index)) continue;
+      const reason = rowOf(queen, puzzle.size) === rowOf(index, puzzle.size) ? `row ${rowOf(queen, puzzle.size) + 1}`
+        : colOf(queen, puzzle.size) === colOf(index, puzzle.size) ? `column ${colOf(queen, puzzle.size) + 1}`
+          : puzzle.regions[queen] === puzzle.regions[index] ? "the same color region"
+            : "an adjacent square";
+      return step("Queen exclusion", index, "x", [queen], `Put X here: the highlighted queen rules out ${reason}.`);
+    }
+  }
+  return null;
+}
+
+function candidateSet(puzzle, state) {
+  const queens = queenIndices(state);
+  const candidates = new Set();
+  for (let index = 0; index < state.length; index++) {
+    if (state[index] === "x") continue;
+    if (state[index] === "q" || queens.every(queen => !attacks(puzzle, queen, index))) candidates.add(index);
+  }
+  return candidates;
+}
+
+function units(puzzle) {
+  const size = puzzle.size;
+  const output = [];
+  for (let row = 0; row < size; row++) output.push({ type: "row", key: row, label: `row ${row + 1}`, cells: [...Array(size)].map((_, col) => idxOf(row, col, size)) });
+  for (let col = 0; col < size; col++) output.push({ type: "column", key: col, label: `column ${col + 1}`, cells: [...Array(size)].map((_, row) => idxOf(row, col, size)) });
+  for (const region of unique([...puzzle.regions])) output.push({ type: "region", key: region, label: `${colorName(region)} region`, cells: [...puzzle.regions].map((value, index) => value === region ? index : -1).filter(index => index >= 0) });
+  return output;
+}
+
+function colorName(region) {
+  return `color ${regionNumber(region) + 1}`;
+}
+
+function singleStep(puzzle, state) {
+  const candidates = candidateSet(puzzle, state);
+  for (const unit of units(puzzle)) {
+    if (unit.cells.some(index => state[index] === "q")) continue;
+    const possible = unit.cells.filter(index => candidates.has(index));
+    if (possible.length === 1) return step("Single candidate", possible[0], "q", possible, `Place a queen here: ${unit.label} has only one legal square left.`);
+  }
+  return null;
+}
+
+function lockedCandidatesStep(puzzle, state) {
+  const candidates = candidateSet(puzzle, state);
+  const allUnits = units(puzzle);
+  for (const source of allUnits) {
+    if (source.cells.some(index => state[index] === "q")) continue;
+    const possible = source.cells.filter(index => candidates.has(index));
+    if (possible.length < 2 || possible.length > 4) continue;
+    for (const target of allUnits) {
+      if (target.type === source.type || !possible.every(index => target.cells.includes(index))) continue;
+      const elimination = target.cells.find(index => state[index] === "" && candidates.has(index) && !possible.includes(index));
+      if (elimination != null) return step("Locked candidates", elimination, "x", possible, `All candidates for ${source.label} lie in ${target.label}; the rest of ${target.label} is excluded.`);
+    }
+  }
+  return null;
+}
+
+function attacks(puzzle, first, second) {
+  if (first === second) return false;
+  const size = puzzle.size;
+  return rowOf(first, size) === rowOf(second, size)
+    || colOf(first, size) === colOf(second, size)
+    || puzzle.regions[first] === puzzle.regions[second]
+    || Math.max(Math.abs(rowOf(first, size) - rowOf(second, size)), Math.abs(colOf(first, size) - colOf(second, size))) <= 1;
+}
+
+function step(technique, target, action, causes, message) {
+  return { technique, target, action, causes: unique(causes), message };
+}
+
+function applyHumanStep(state, deduction) {
+  const next = [...state];
+  if (deduction.action === "q") next[deduction.target] = "q";
+  else if (deduction.action === "x") next[deduction.target] = "x";
+  else if (deduction.action === "clear") next[deduction.target] = "";
+  return next;
+}
+
+function humanSolveReport(puzzle) {
+  let state = Array(puzzle.size * puzzle.size).fill("");
+  const path = [];
+  const answer = solutionSet(puzzle);
+  const maxSteps = puzzle.size * puzzle.size * 3;
+  for (let count = 0; count < maxSteps; count++) {
+    if (isSolvedState(puzzle, state)) return { solved: true, path };
+    const deduction = nextHumanStep(puzzle, state);
+    if (!deduction || deduction.action === "clear") return { solved: false, path };
+    if (deduction.action === "q" && !answer.has(deduction.target)) return { solved: false, path };
+    if (deduction.action === "x" && answer.has(deduction.target)) return { solved: false, path };
+    const next = applyHumanStep(state, deduction);
+    if (next[deduction.target] === state[deduction.target]) return { solved: false, path };
+    state = next;
+    path.push(deduction);
+  }
+  return { solved: false, path };
+}
+
+function giveHint() {
+  startTimer();
+  checkMode = false;
+  hint = nextHumanStep(activePuzzle, marks);
+  if (!hint) {
+    statusEl.className = "status bad";
+    statusEl.innerHTML = '<span class="technique">No basic deduction</span>This archived board is outside the current basic hint set; no answer was revealed.';
+    return;
+  }
+  hintCount++;
+  render();
+}
+
+function transformPuzzle(base, humanSteps) {
+  const size = base.size;
+  const [name, transform] = TRANSFORMS[Math.floor(Math.random() * TRANSFORMS.length)];
+  const regions = Array(size * size);
+  const solution = Array(size * size).fill(".");
+  for (let index = 0; index < size * size; index++) {
+    const [row, col] = transform(rowOf(index, size), colOf(index, size), size);
+    const target = idxOf(row, col, size);
+    regions[target] = base.regions[index];
+    if (base.solution[index] === "Q") solution[target] = "Q";
+  }
+  const labels = unique(regions);
+  const shuffled = shuffle(ALPHABET.slice(0, labels.length).split(""));
+  const map = new Map(labels.map((label, index) => [label, shuffled[index]]));
+  return {
+    id: `random-${size}-${Date.now()}-${++randomCounter}`,
+    source: "basic archive shuffle",
+    templateDay: base.day,
+    transformName: name,
+    humanSteps,
+    size,
+    regions: regions.map(label => map.get(label)).join(""),
+    solution: solution.join(""),
+    unique: true,
+  };
+}
+
+function easyPool(size) {
+  if (easyPoolCache.has(size)) return easyPoolCache.get(size);
+  const accepted = [];
+  for (const puzzle of PUZZLES.filter(item => item.size === size && item.unique !== false)) {
+    const report = humanSolveReport(puzzle);
+    if (report.solved) accepted.push({ puzzle, steps: report.path.length });
+  }
+  easyPoolCache.set(size, accepted);
+  return accepted;
+}
+
+function createRandom(size) {
+  const pool = easyPool(size);
+  if (!pool.length) throw new Error(`No fully basic-solvable ${size}×${size} templates are loaded.`);
+  const selected = pool[Math.floor(Math.random() * pool.length)];
+  return transformPuzzle(selected.puzzle, selected.steps);
+}
+
+function shuffle(values) {
+  const copy = [...values];
+  for (let index = copy.length - 1; index > 0; index--) {
+    const other = Math.floor(Math.random() * (index + 1));
+    [copy[index], copy[other]] = [copy[other], copy[index]];
+  }
+  return copy;
+}
+
+function startTimer() {
+  if (solvedLogged || timerStartedAt != null) return;
+  timerStartedAt = performance.now();
+  timerHandle = setInterval(renderTimer, 250);
+  renderTimer();
+}
+function stopTimer() {
+  if (timerStartedAt == null) return;
+  elapsed += performance.now() - timerStartedAt;
+  timerStartedAt = null;
+  clearInterval(timerHandle);
+  timerHandle = null;
+  renderTimer();
+}
+function resetTimer() {
+  timerStartedAt = null;
+  elapsed = 0;
+  clearInterval(timerHandle);
+  timerHandle = null;
+  renderTimer();
+}
+function currentMs() {
+  return elapsed + (timerStartedAt == null ? 0 : performance.now() - timerStartedAt);
+}
+function renderTimer() {
+  timerEl.textContent = formatTime(currentMs());
+}
+function formatTime(ms) {
+  const seconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(seconds / 60);
+  return minutes < 60 ? `${String(minutes).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}` : `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
+function loadStats() {
+  try {
+    return JSON.parse(localStorage.getItem(STORAGE_KEY)) || { sessions: [], puzzles: {} };
+  } catch {
+    return { sessions: [], puzzles: {} };
+  }
+}
+function saveStats() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(stats));
+}
+function entry(id, create = true) {
+  if (!stats.puzzles) stats.puzzles = {};
+  if (!stats.puzzles[id] && create) stats.puzzles[id] = { solved: 0, best: null, playRating: null, visualRating: null };
+  return stats.puzzles[id];
+}
+function finishSolve() {
+  if (solvedLogged) return;
+  solvedLogged = true;
+  stopTimer();
+  const data = entry(activePuzzle.id);
+  data.solved++;
+  data.best = data.best == null ? currentMs() : Math.min(data.best, currentMs());
+  stats.sessions.push({ id: activePuzzle.id, at: new Date().toISOString(), ms: currentMs(), hints: hintCount });
+  saveStats();
+  renderRating();
+}
+function renderStats() {
+  const data = entry(activePuzzle.id, false);
+  statsEl.textContent = `Best: ${data?.best == null ? "—" : formatTime(data.best)} · solved: ${data?.solved ?? 0} · all solves: ${stats.sessions?.length ?? 0}`;
+}
+function renderRating() {
+  const data = entry(activePuzzle.id, false);
+  ratingPanel.hidden = !(solvedLogged || data);
+  if (ratingPanel.hidden) return;
+  const current = entry(activePuzzle.id);
+  ratingPanel.innerHTML = "";
+  ratingPanel.append(ratingRow("Play", current, "playRating"), ratingRow("Visual", current, "visualRating"));
+}
+function ratingRow(label, data, key) {
+  const row = document.createElement("div");
+  row.className = "rating-row";
+  row.innerHTML = `<span>${label}</span>`;
+  const stars = document.createElement("div");
+  stars.className = "stars";
+  for (let value = 1; value <= 5; value++) {
+    const button = document.createElement("button");
+    button.className = `star${value <= (data[key] ?? 0) ? " active" : ""}`;
+    button.textContent = "★";
+    button.onclick = () => {
+      data[key] = value;
+      saveStats();
+      renderRating();
+    };
+    stars.append(button);
+  }
+  row.append(stars);
+  return row;
+}
+
+selectEl.onchange = () => loadPuzzle(PUZZLES.find(puzzle => puzzle.id === selectEl.value) ?? PUZZLES[0]);
+clearButton.onclick = () => loadPuzzle(activePuzzle, selectEl.value);
+checkButton.onclick = () => {
+  startTimer();
+  checkMode = !checkMode;
+  hint = null;
+  checkButton.textContent = checkMode ? "Hide check" : "Check";
+  render();
+};
+hintButton.onclick = giveHint;
+solutionButton.onclick = () => {
+  startTimer();
+  showSolution = !showSolution;
+  solutionButton.textContent = showSolution ? "Hide solution" : "Show solution";
+  render();
+};
+randomButton.onclick = () => {
+  randomButton.disabled = true;
+  const previousText = randomButton.textContent;
+  randomButton.textContent = "Filtering…";
+  requestAnimationFrame(() => {
+    try {
+      const puzzle = createRandom(Number(randomSizeEl.value));
+      const value = "__random__";
+      let option = [...selectEl.options].find(item => item.value === value);
+      if (!option) {
+        option = document.createElement("option");
+        option.value = value;
+        selectEl.prepend(option);
+      }
+      option.textContent = `Random ${puzzle.size}×${puzzle.size} · day ${puzzle.templateDay}`;
+      loadPuzzle(puzzle, value);
+    } catch (error) {
+      statusEl.className = "status bad";
+      statusEl.textContent = error.message;
+    } finally {
+      randomButton.disabled = false;
+      randomButton.textContent = previousText;
+    }
+  });
+};
+exportStatsButton.onclick = () => {
+  const blob = new Blob([JSON.stringify(stats, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = "queens-stats.json";
+  anchor.click();
+  URL.revokeObjectURL(url);
+};
+
+populateSelect();
+loadPuzzle(PUZZLES[0]);
