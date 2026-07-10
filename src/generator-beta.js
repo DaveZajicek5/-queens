@@ -1,6 +1,18 @@
 import { PUZZLES } from "./puzzles.js";
 
 const ALPHABET = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+const RECENT_KEY = "queens-generated-recent:v1";
+const TRANSFORMS = [
+  ["identity", (r, c) => [r, c]],
+  ["rotate 90", (r, c, n) => [c, n - 1 - r]],
+  ["rotate 180", (r, c, n) => [n - 1 - r, n - 1 - c]],
+  ["rotate 270", (r, c, n) => [n - 1 - c, r]],
+  ["mirror horizontal", (r, c, n) => [r, n - 1 - c]],
+  ["mirror vertical", (r, c, n) => [n - 1 - r, c]],
+  ["transpose", (r, c) => [c, r]],
+  ["anti-transpose", (r, c, n) => [n - 1 - c, n - 1 - r]],
+];
+
 const modeEl = document.querySelector("#randomMode");
 const sizeEl = document.querySelector("#randomSize");
 const buttonEl = document.querySelector("#randomButton");
@@ -11,7 +23,9 @@ let serial = 0;
 const basePoolCache = new Map();
 
 function refreshSizes() {
-  const available = [...new Set(PUZZLES.map(puzzle => puzzle.size))].filter(size => size === 7 || size === 8).sort();
+  const available = [...new Set(PUZZLES.map(puzzle => puzzle.size))]
+    .filter(size => size === 7 || size === 8)
+    .sort();
   const current = Number(sizeEl.value);
   sizeEl.innerHTML = available.map(size => `<option value="${size}">${size}×${size}</option>`).join("");
   sizeEl.value = available.includes(current) ? String(current) : String(available.includes(8) ? 8 : available[0]);
@@ -30,7 +44,7 @@ buttonEl.addEventListener("click", async event => {
   buttonEl.disabled = true;
   buttonEl.textContent = "Generating…";
   statusEl.className = "status";
-  statusEl.textContent = `Building a new ${size}×${size} board from region mutations…`;
+  statusEl.textContent = `Building a distinct ${size}×${size} board…`;
 
   try {
     const puzzle = await generateMutatedPuzzle(size);
@@ -54,60 +68,63 @@ async function generateMutatedPuzzle(size) {
   const bases = getBasePool(size);
   if (!bases.length) throw new Error(`No verified ${size}×${size} source boards are available.`);
 
-  let bestFallback = null;
-  const maxAttempts = 900;
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    const base = bases[Math.floor(Math.random() * bases.length)];
-    const mutationsWanted = 1 + Math.floor(Math.random() * 4);
-    const mutated = mutateRegions(base, mutationsWanted);
-    if (!mutated || mutated.regions === base.regions) continue;
+  const recent = readRecent();
+  const freshBases = bases.filter(base => !recent.includes(base.id));
+  const base = randomItem(freshBases.length ? freshBases : bases);
+  const transformed = transformPuzzle(base, randomItem(TRANSFORMS));
 
-    const solutions = solveExact(size, mutated.regions, 2);
+  let current = transformed;
+  let accepted = 0;
+  const target = size === 8 ? 8 + randomInt(0, 5) : 6 + randomInt(0, 5);
+  const maxTrials = size === 8 ? 1800 : 1200;
+
+  for (let trial = 1; trial <= maxTrials && accepted < target; trial++) {
+    const proposal = proposeSingleMutation(current);
+    if (!proposal) continue;
+
+    const solutions = solveExact(size, proposal.regions, 2);
     if (solutions.length !== 1) continue;
 
-    const solution = indicesToSolution(solutions[0], size);
-    const puzzle = {
-      id: `generated-${size}-${Date.now()}-${++serial}`,
-      day: null,
-      size,
-      source: "generated mutation",
-      generator: "archive-region-mutation-v2",
-      templateDay: base.day ?? null,
-      mutationCount: mutated.count,
-      generatedAttempts: attempt,
-      regions: mutated.regions,
-      solution,
-      solutionCols: solutionColumns(solution, size),
-      unique: true,
-    };
+    proposal.solution = indicesToSolution(solutions[0], size);
+    proposal.solutionCols = solutionColumns(proposal.solution, size);
+    const path = basicHumanPath(proposal);
+    if (!path.solved) continue;
 
-    const path = basicHumanPath(puzzle);
-    if (path.solved) {
-      puzzle.humanSteps = path.steps;
-      puzzle.maxTechnique = path.maxTechnique;
-      return puzzle;
-    }
+    current = proposal;
+    current.humanSteps = path.steps;
+    current.maxTechnique = path.maxTechnique;
+    accepted++;
 
-    if (!bestFallback && path.steps >= size * 2) bestFallback = puzzle;
-    if (attempt % 40 === 0) await new Promise(resolve => setTimeout(resolve, 0));
+    if (trial % 45 === 0) await new Promise(resolve => setTimeout(resolve, 0));
   }
 
-  // A unique mutated board is still preferable to silently falling back to a rotation,
-  // but normal hints may not cover every step on this rare fallback.
-  if (bestFallback) {
-    bestFallback.source = "generated mutation · advanced";
-    return bestFallback;
+  // A generated board must differ materially from its transformed source.
+  // If the target was too ambitious, return the best valid chain rather than an error.
+  if (accepted === 0) {
+    // The transformed source is still playable, but label it honestly.
+    current.source = "generated transform fallback";
+  } else {
+    current.source = accepted >= Math.min(target, 6) ? "generated mutation" : "generated light mutation";
   }
-  throw new Error(`Could not find a valid mutated ${size}×${size} board. Try once more.`);
+
+  current.id = `generated-${size}-${Date.now()}-${++serial}`;
+  current.day = null;
+  current.generator = "iterative-region-mutation-v3";
+  current.templateDay = base.day ?? null;
+  current.templateId = base.id;
+  current.transformName = transformed.transformName;
+  current.mutationCount = accepted;
+  current.unique = true;
+
+  rememberBase(base.id);
+  return current;
 }
 
 function getBasePool(size) {
   if (basePoolCache.has(size)) return basePoolCache.get(size);
   const pool = PUZZLES.filter(puzzle => {
-    if (puzzle.size !== size || puzzle.unique === false) return false;
-    if (!validPuzzleShape(puzzle)) return false;
-    const path = basicHumanPath(puzzle);
-    return path.solved;
+    if (puzzle.size !== size || puzzle.unique === false || !validPuzzleShape(puzzle)) return false;
+    return basicHumanPath(puzzle).solved;
   });
   basePoolCache.set(size, pool);
   return pool;
@@ -121,37 +138,57 @@ function validPuzzleShape(puzzle) {
     && [...puzzle.solution].filter(value => value === "Q").length === puzzle.size;
 }
 
-function mutateRegions(base, wanted) {
+function transformPuzzle(base, transform) {
+  const [name, fn] = transform;
   const size = base.size;
-  const regions = [...base.regions];
-  const queenCells = new Set([...base.solution].map((value, index) => value === "Q" ? index : -1).filter(index => index >= 0));
-  let count = 0;
+  const regions = Array(size * size);
+  const solution = Array(size * size).fill(".");
 
-  for (let step = 0; step < wanted * 12 && count < wanted; step++) {
-    const candidates = boundaryCells(regions, size).filter(index => !queenCells.has(index));
-    if (!candidates.length) break;
-    const cell = candidates[Math.floor(Math.random() * candidates.length)];
-    const from = regions[cell];
-    const targets = [...new Set(neighbours(cell, size).map(index => regions[index]).filter(region => region !== from))];
-    shuffle(targets);
-
-    let moved = false;
-    for (const target of targets) {
-      if (!sourceRemainsConnected(regions, size, from, cell)) continue;
-      const old = regions[cell];
-      regions[cell] = target;
-      if (!reasonableRegionSizes(regions, size)) {
-        regions[cell] = old;
-        continue;
-      }
-      moved = true;
-      count++;
-      break;
-    }
-    if (!moved) continue;
+  for (let index = 0; index < size * size; index++) {
+    const row = Math.floor(index / size);
+    const col = index % size;
+    const [nextRow, nextCol] = fn(row, col, size);
+    const next = nextRow * size + nextCol;
+    regions[next] = base.regions[index];
+    if (base.solution[index] === "Q") solution[next] = "Q";
   }
 
-  return count > 0 ? { regions: regions.join(""), count } : null;
+  const labels = [...new Set(regions)];
+  const shuffled = shuffle(ALPHABET.slice(0, labels.length).split(""));
+  const relabel = new Map(labels.map((label, index) => [label, shuffled[index]]));
+
+  return {
+    id: "working",
+    size,
+    day: null,
+    source: "generated working",
+    regions: regions.map(label => relabel.get(label)).join(""),
+    solution: solution.join(""),
+    solutionCols: solutionColumns(solution.join(""), size),
+    unique: true,
+    transformName: name,
+  };
+}
+
+function proposeSingleMutation(puzzle) {
+  const size = puzzle.size;
+  const regions = [...puzzle.regions];
+  const queens = new Set([...puzzle.solution].map((value, index) => value === "Q" ? index : -1).filter(index => index >= 0));
+  const candidates = shuffle(boundaryCells(regions, size).filter(index => !queens.has(index)));
+
+  for (const cell of candidates) {
+    const from = regions[cell];
+    const targets = shuffle([...new Set(neighbours(cell, size).map(index => regions[index]).filter(region => region !== from))]);
+    for (const target of targets) {
+      if (!sourceRemainsConnected(regions, size, from, cell)) continue;
+      const next = [...regions];
+      next[cell] = target;
+      if (!reasonableRegionSizes(next, size)) continue;
+      if (!allRegionsConnected(next, size)) continue;
+      return { ...puzzle, regions: next.join("") };
+    }
+  }
+  return null;
 }
 
 function boundaryCells(regions, size) {
@@ -165,23 +202,35 @@ function boundaryCells(regions, size) {
 function sourceRemainsConnected(regions, size, source, removed) {
   const remaining = regions.map((region, index) => region === source && index !== removed ? index : -1).filter(index => index >= 0);
   if (!remaining.length) return false;
-  const seen = new Set([remaining[0]]);
-  const stack = [remaining[0]];
+  return connectedCount(regions, size, source, remaining[0], removed) === remaining.length;
+}
+
+function allRegionsConnected(regions, size) {
+  for (const region of new Set(regions)) {
+    const cells = regions.map((value, index) => value === region ? index : -1).filter(index => index >= 0);
+    if (!cells.length || connectedCount(regions, size, region, cells[0], -1) !== cells.length) return false;
+  }
+  return true;
+}
+
+function connectedCount(regions, size, region, start, blocked) {
+  const seen = new Set([start]);
+  const stack = [start];
   while (stack.length) {
     const current = stack.pop();
     for (const next of neighbours(current, size)) {
-      if (next === removed || regions[next] !== source || seen.has(next)) continue;
+      if (next === blocked || regions[next] !== region || seen.has(next)) continue;
       seen.add(next);
       stack.push(next);
     }
   }
-  return seen.size === remaining.length;
+  return seen.size;
 }
 
 function reasonableRegionSizes(regions, size) {
   const counts = new Map();
   for (const region of regions) counts.set(region, (counts.get(region) ?? 0) + 1);
-  return [...counts.values()].every(count => count >= 2 && count <= size + 5);
+  return [...counts.values()].every(count => count >= 2 && count <= size + 6);
 }
 
 function solveExact(size, regions, limit = 2) {
@@ -222,7 +271,6 @@ function basicHumanPath(puzzle) {
   let steps = 0;
   let maxTechnique = 0;
   const guardLimit = puzzle.size * puzzle.size * 4;
-
   for (let guard = 0; guard < guardLimit; guard++) {
     if (stateSolved(puzzle, state)) return { solved: true, steps, maxTechnique };
     const deduction = nextBasicDeduction(puzzle, state);
@@ -322,10 +370,33 @@ function solutionColumns(solution, size) {
   return [...Array(size)].map((_, row) => solution.slice(row * size, (row + 1) * size).indexOf("Q") + 1);
 }
 
-function shuffle(values) {
-  for (let index = values.length - 1; index > 0; index--) {
-    const other = Math.floor(Math.random() * (index + 1));
-    [values[index], values[other]] = [values[other], values[index]];
+function readRecent() {
+  try {
+    const value = JSON.parse(localStorage.getItem(RECENT_KEY) ?? "[]");
+    return Array.isArray(value) ? value : [];
+  } catch {
+    return [];
   }
-  return values;
+}
+
+function rememberBase(id) {
+  const next = [id, ...readRecent().filter(value => value !== id)].slice(0, 12);
+  localStorage.setItem(RECENT_KEY, JSON.stringify(next));
+}
+
+function randomItem(values) {
+  return values[Math.floor(Math.random() * values.length)];
+}
+
+function randomInt(min, max) {
+  return min + Math.floor(Math.random() * (max - min + 1));
+}
+
+function shuffle(values) {
+  const result = [...values];
+  for (let index = result.length - 1; index > 0; index--) {
+    const other = Math.floor(Math.random() * (index + 1));
+    [result[index], result[other]] = [result[other], result[index]];
+  }
+  return result;
 }
