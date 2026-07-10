@@ -24,13 +24,23 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - name: Build static site and app icons
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y librsvg2-bin
+          mkdir -p _site/icons
+          rsync -a --exclude '_site' --exclude '.git' ./ _site/
+          rsvg-convert -w 180 -h 180 icons/app-icon.svg -o _site/icons/apple-touch-icon.png
+          rsvg-convert -w 192 -h 192 icons/app-icon.svg -o _site/icons/icon-192.png
+          rsvg-convert -w 512 -h 512 icons/app-icon.svg -o _site/icons/icon-512.png
+
       - name: Configure Pages
         uses: actions/configure-pages@v5
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: .
+          path: _site
 
       - name: Deploy to GitHub Pages
         id: deployment
