@@ -1,0 +1,48 @@
+name: Import Queens archive
+
+on:
+  workflow_dispatch:
+    inputs:
+      from_day:
+        description: First day to import
+        required: true
+        default: "583"
+      to_day:
+        description: Last day to import
+        required: true
+        default: "801"
+
+permissions:
+  contents: write
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Import archive
+        run: node tools/import-zipgame-queens.mjs scrape "${{ inputs.from_day }}" "${{ inputs.to_day }}" --out src/puzzles.js
+
+      - name: Show result
+        run: |
+          node -e "import('./src/puzzles.js').then(m => console.log('Imported puzzles:', m.PUZZLES.length))"
+          git diff -- src/puzzles.js
+
+      - name: Commit imported puzzles
+        run: |
+          if git diff --quiet -- src/puzzles.js; then
+            echo "No puzzle changes to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/puzzles.js
+          git commit -m "Import Queens archive"
+          git push
