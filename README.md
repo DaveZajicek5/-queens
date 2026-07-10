@@ -2,25 +2,25 @@
 
 A tiny offline-friendly Queens player/importer/generator for mobile.
 
-It can import solved LinkedIn Queens-style boards from HTML blocks like the ones on `zipgameonline.com/linkedin-queens-answers/day-583`, serialize them, and play them on mobile without a daily limit. It also has a fully random generator that searches for a connected-region board with a unique solution.
+It can import solved LinkedIn Queens-style boards from HTML blocks like the ones on `zipgameonline.com/linkedin-queens-answers/day-583`, serialize them, and play them on mobile without a daily limit. Random mode now uses real imported archive boards as templates, then applies random symmetries and region relabeling so generation is instant and still Queens-like.
 
 ## Features
 
 - Archive picker for imported days.
-- Random 7×7, 8×8, and 9×9 generation.
-- Solver-backed uniqueness check for generated boards.
+- Reliable random 7×7, 8×8, and 9×9 mode based on archive-template shuffling.
+- Random transforms: rotations, mirrors, transposes, and color/region relabeling.
 - Square/cube-style X and queen marks.
 - Thick outer borders around each same-color region.
 - Timer that starts on the first move.
 - Check mode that highlights conflicts and wrong marks.
-- Hint mode that highlights a wrong mark or the next solution square.
+- Hint mode with simple logical hints first, then a solver-backed forced-completion hint if needed.
 - Show/hide solution.
 - Local solve history, best time, hint count, play rating, visual rating.
 - JSON stats export.
 
 ## Data model
 
-Each puzzle is stored as:
+Each archived puzzle is stored as:
 
 ```js
 {
@@ -37,6 +37,8 @@ Each puzzle is stored as:
 
 `regions` is row-major. Each character is the color/region id of one cell.  
 `solution` is also row-major, with `Q` for queens and `.` for empty cells.
+
+Random-template puzzles are created only in the browser session. They add fields like `templateDay`, `templateId`, and `transformName`.
 
 ## Run locally
 
@@ -76,13 +78,15 @@ node tools/import-zipgame-queens.mjs scrape 583 801 --out src/puzzles.js
 
 The script skips pages it cannot parse or fetch. If the public archive only exposes a smaller range, the output will contain only the available days.
 
-## Random generation
+## Random mode
 
-The client-side generator:
+The default random mode is intentionally template-based rather than fully procedural:
 
-1. grows `N` connected random regions on an `N×N` board,
-2. solves the region layout with Queens constraints,
-3. accepts the board only when exactly one solution is found,
-4. stores that solution in the active in-browser puzzle object.
+1. choose a real imported board of the requested size,
+2. apply one random symmetry: rotate, mirror, transpose, etc.,
+3. relabel all color regions,
+4. keep the transformed solution in memory.
 
-Generated boards are not saved to the archive file automatically. Solve/rating data is stored locally in `localStorage` and can be exported as JSON from the UI.
+This avoids the earlier failure mode where a procedural generator could find unique boards but fail the incomplete human-solver filter. The result is not a brand-new hand-authored puzzle, but it is fast, varied, and preserves the structure of real imported Queens boards.
+
+Solve/rating data is stored locally in `localStorage` and can be exported as JSON from the UI.
