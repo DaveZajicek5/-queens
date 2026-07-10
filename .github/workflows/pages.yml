@@ -30,7 +30,8 @@ jobs:
           sudo apt-get install -y librsvg2-bin
           mkdir -p _site/icons
           rsync -a --exclude '_site' --exclude '.git' ./ _site/
-          rsvg-convert -w 180 -h 180 icons/app-icon.svg -o _site/icons/apple-touch-icon.png
+          rsvg-convert -w 180 -h 180 icons/app-icon.svg -o _site/apple-touch-icon.png
+          cp _site/apple-touch-icon.png _site/icons/apple-touch-icon.png
           rsvg-convert -w 192 -h 192 icons/app-icon.svg -o _site/icons/icon-192.png
           rsvg-convert -w 512 -h 512 icons/app-icon.svg -o _site/icons/icon-512.png
 
