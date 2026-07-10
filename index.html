@@ -7,9 +7,9 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="Queens" />
-  <link rel="manifest" href="./manifest.webmanifest?v=3" />
-  <link rel="icon" href="./icons/app-icon.svg?v=3" type="image/svg+xml" />
-  <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png?v=3" />
+  <link rel="manifest" href="./manifest.webmanifest?v=4" />
+  <link rel="icon" href="./icons/app-icon.svg?v=4" type="image/svg+xml" />
+  <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png?v=4" />
   <title>Queens</title>
   <style>
     :root{color-scheme:light dark;--bg:#0f172a;--panel:#111827;--text:#e5e7eb;--muted:#94a3b8;--strong:rgba(15,23,42,.78);--button:rgba(255,255,255,.08);--button-border:rgba(255,255,255,.18);font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
@@ -17,10 +17,10 @@
     .topbar{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px}.topbar select,.timer,.actions button,.actions select,details button{border:1px solid var(--button-border);background:var(--button);color:var(--text);border-radius:14px;min-height:44px;padding:0 12px;font:inherit;font-weight:700}.timer{display:grid;place-items:center;min-width:86px;font-variant-numeric:tabular-nums;font-size:1.15rem}
     .board-shell{display:grid;place-items:center}.board{display:grid;width:min(calc(100vw - 16px),540px);aspect-ratio:1;border:4px solid var(--strong);border-radius:16px;overflow:hidden;background:#1e293b;touch-action:manipulation}.cell{appearance:none;-webkit-appearance:none;position:relative;display:grid;place-items:center;width:100%;height:100%;min-width:0;min-height:0;margin:0;padding:0;border-radius:0;border-style:solid;border-color:var(--strong);background-clip:border-box;cursor:pointer}.cell::before,.cell::after{pointer-events:none}.cell[data-state="x"]::before{content:"×";display:grid;place-items:center;width:34%;height:34%;border-radius:5px;background:rgba(15,23,42,.42);color:#fff;font-weight:950;font-size:clamp(13px,5vw,28px);box-shadow:0 2px 4px rgba(0,0,0,.2)}.cell[data-state="q"]::before{content:"♛";display:grid;place-items:center;width:48%;height:48%;border-radius:6px;background:rgba(255,255,255,.88);color:#111827;border:2px solid rgba(15,23,42,.45);font-weight:950;font-size:clamp(14px,5vw,28px);box-shadow:0 2px 5px rgba(0,0,0,.28)}.cell.error{box-shadow:inset 0 0 0 4px rgba(239,68,68,.82);z-index:3}.cell.hint-target{box-shadow:inset 0 0 0 5px #facc15;z-index:4}.cell.hint-cause{box-shadow:inset 0 0 0 4px rgba(59,130,246,.88);z-index:3}.cell.hint-target::after{position:absolute;display:grid;place-items:center;width:44%;height:44%;border-radius:6px;background:#fef08a;color:#713f12;font-weight:950;font-size:clamp(13px,5vw,27px);box-shadow:0 2px 6px rgba(0,0,0,.25)}.cell.hint-target[data-hint-action="x"]::after{content:"×"}.cell.hint-target[data-hint-action="q"]::after{content:"♛"}.cell.hint-target[data-hint-action="clear"]::after{content:"!"}.cell.solution::after{content:"♛";position:absolute;inset:0;display:grid;place-items:center;color:rgba(17,24,39,.4);font-size:clamp(20px,7vw,38px)}
     .status{min-height:42px;text-align:center;color:var(--muted);font-weight:750;line-height:1.3;padding:2px 8px}.status.ok{color:#86efac}.status.bad{color:#fca5a5}.technique{display:block;color:var(--text);font-size:.84rem;text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px}
-    .actions{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.actions select{grid-column:span 1;min-width:0}.actions button{padding:0 8px;cursor:pointer}.actions .wide{grid-column:span 2}.actions button:disabled{opacity:.55}
+    .actions{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.actions select{grid-column:span 1;min-width:0}.actions button{padding:0 8px;cursor:pointer}.actions .wide{grid-column:span 2}.actions button:disabled{opacity:.55}.mode-row{display:grid;grid-template-columns:1fr 1fr;gap:8px}.mode-row select{width:100%}
     details{border:1px solid var(--button-border);border-radius:14px;padding:8px 12px;color:var(--muted)}summary{cursor:pointer;font-weight:750;color:var(--text)}.details-content{display:grid;gap:8px;padding-top:8px;font-size:.88rem;text-align:center}.rating-panel{display:grid;gap:6px}.rating-row{display:flex;justify-content:space-between;align-items:center}.stars{display:flex;gap:4px}.star{min-height:32px;min-width:32px;padding:0;border-radius:8px}.star.active{color:#facc15}.secondary-actions{display:flex;justify-content:center;gap:8px;flex-wrap:wrap}
-    @media(max-width:600px){body{padding-left:6px;padding-right:6px}.desktop-title{display:none}.game{gap:7px}.board{width:min(calc(100vw - 12px),calc(100svh - 245px),540px);border-radius:12px}.actions{gap:6px}.actions button,.actions select{min-height:40px;border-radius:12px;font-size:.92rem}.topbar select,.timer{min-height:40px;border-radius:12px}.status{min-height:36px;font-size:.92rem}details{padding:6px 10px}}
-    @media(max-height:700px) and (max-width:600px){.board{width:min(calc(100vw - 12px),calc(100svh - 215px))}.actions button,.actions select{min-height:36px}.topbar select,.timer{min-height:36px}.status{min-height:30px;font-size:.84rem}.game{gap:5px}}
+    @media(max-width:600px){body{padding-left:6px;padding-right:6px}.desktop-title{display:none}.game{gap:7px}.board{width:min(calc(100vw - 12px),calc(100svh - 292px),540px);border-radius:12px}.actions{gap:6px}.actions button,.actions select{min-height:40px;border-radius:12px;font-size:.92rem}.topbar select,.timer{min-height:40px;border-radius:12px}.status{min-height:36px;font-size:.92rem}details{padding:6px 10px}}
+    @media(max-height:700px) and (max-width:600px){.board{width:min(calc(100vw - 12px),calc(100svh - 260px))}.actions button,.actions select{min-height:36px}.topbar select,.timer{min-height:36px}.status{min-height:30px;font-size:.84rem}.game{gap:5px}}
     @media(prefers-color-scheme:light){:root{--bg:#f8fafc;--panel:#fff;--text:#0f172a;--muted:#64748b;--strong:rgba(15,23,42,.55);--button:#fff;--button-border:rgba(15,23,42,.17)}body{background:#f8fafc}.board{background:#e2e8f0}}
   </style>
 </head>
@@ -30,9 +30,12 @@
   <div class="board-shell"><div id="board" class="board" role="grid" aria-label="Queens board"></div></div>
   <div id="status" class="status"></div>
   <div class="actions">
-    <select id="randomSize" aria-label="Random board size"><option value="7">7×7</option><option value="8" selected>8×8</option></select>
-    <button id="randomButton" class="wide" type="button">New random</button>
+    <div class="mode-row" style="grid-column:1/-1">
+      <select id="randomMode" aria-label="Random mode"><option value="archive">Archive shuffle</option><option value="generated">Generated beta</option></select>
+      <select id="randomSize" aria-label="Random board size"><option value="7">7×7</option><option value="8" selected>8×8</option></select>
+    </div>
+    <button id="randomButton" style="grid-column:1/-1" type="button">New random</button>
     <button id="clearButton" type="button">Clear</button><button id="checkButton" type="button">Check</button><button id="hintButton" type="button">Hint</button>
   </div>
   <details><summary>More</summary><div class="details-content"><div class="secondary-actions"><button id="solutionButton" type="button">Show solution</button><button id="exportStatsButton" type="button">Export stats</button></div><div id="ratingPanel" class="rating-panel" hidden></div><div id="stats"></div><div id="meta"></div></div></details>
-</section><script type="module" src="./src/app.js"></script></main></body></html>
+</section><script type="module" src="./src/app.js"></script><script type="module" src="./src/generator-beta.js"></script></main></body></html>
