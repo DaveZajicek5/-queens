@@ -5,18 +5,20 @@
       <stop offset="1" stop-color="#1e293b"/>
     </linearGradient>
     <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
-      <feDropShadow dx="0" dy="14" stdDeviation="12" flood-color="#000" flood-opacity=".35"/>
+      <feDropShadow dx="0" dy="12" stdDeviation="10" flood-color="#000" flood-opacity=".34"/>
     </filter>
   </defs>
   <rect width="512" height="512" rx="104" fill="url(#bg)"/>
   <g transform="translate(56 56)">
-    <rect x="0" y="0" width="190" height="190" rx="34" fill="#86efac"/>
-    <rect x="210" y="0" width="190" height="190" rx="34" fill="#fde68a"/>
-    <rect x="0" y="210" width="190" height="190" rx="34" fill="#f9a8d4"/>
-    <rect x="210" y="210" width="190" height="190" rx="34" fill="#93c5fd"/>
+    <rect width="190" height="190" rx="28" fill="#86efac"/>
+    <rect x="210" width="190" height="190" rx="28" fill="#fde68a"/>
+    <rect y="210" width="190" height="190" rx="28" fill="#f9a8d4"/>
+    <rect x="210" y="210" width="190" height="190" rx="28" fill="#93c5fd"/>
   </g>
   <g filter="url(#shadow)">
-    <rect x="156" y="156" width="200" height="200" rx="44" fill="#f8fafc" stroke="#334155" stroke-width="12"/>
-    <text x="256" y="302" text-anchor="middle" font-size="168" font-family="Georgia, 'Times New Roman', serif" font-weight="700" fill="#111827">♛</text>
+    <rect x="146" y="146" width="220" height="220" rx="46" fill="#f8fafc" stroke="#334155" stroke-width="12"/>
+    <g transform="translate(166 166) scale(7.5)" fill="#111827">
+      <path d="M23.25 7C23.25 7.69 22.69 8.25 22 8.25C21.89 8.25 21.78 8.21 21.68 8.18L19 17.99H5L2.32 8.18C2.21 8.21 2.11 8.25 2 8.25C1.31 8.25 0.75 7.69 0.75 7C0.75 6.31 1.31 5.75 2 5.75C2.69 5.75 3.25 6.31 3.25 7C3.25 7.31 3.13 7.59 2.94 7.8L9 13L11.65 4.18C11.14 4.03 10.75 3.57 10.75 3C10.75 2.31 11.31 1.75 12 1.75C12.69 1.75 13.25 2.31 13.25 3C13.25 3.56 12.87 4.02 12.35 4.18L15 13L21.06 7.8C20.87 7.58 20.75 7.31 20.75 7C20.75 6.31 21.31 5.75 22 5.75C22.69 5.75 23.25 6.31 23.25 7ZM19 19H5C4.45 19 4 19.45 4 20C4 20.55 4.45 21 5 21H19C19.55 21 20 20.55 20 20C20 19.45 19.55 19 19 19Z"/>
+    </g>
   </g>
 </svg>
