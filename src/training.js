@@ -13,36 +13,24 @@ let enabled = false;
 let deadline = 0;
 let timer = null;
 let revealing = false;
-let waitingForBoard = false;
 let stepStartedAt = 0;
 let lastBoardSignature = '';
 let stats = loadStats();
 
 function loadStats() {
-  try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY)) || { attempts: [], techniques: {} };
-  } catch {
-    return { attempts: [], techniques: {} };
-  }
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || { attempts: [], techniques: {} }; }
+  catch { return { attempts: [], techniques: {} }; }
 }
 
-function saveStats() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(stats));
-}
-
-function boardSignature() {
-  return [...board.querySelectorAll('.cell')].map(cell => cell.dataset.state || '.').join('');
-}
-
-function currentDelay() {
-  return Number(trainingDelay.value || 5) * 1000;
-}
+function saveStats() { localStorage.setItem(STORAGE_KEY, JSON.stringify(stats)); }
+function boardSignature() { return [...board.querySelectorAll('.cell')].map(cell => cell.dataset.state || '.').join(''); }
+function currentDelay() { return Number(trainingDelay.value || 5) * 1000; }
+function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
 
 function startStep() {
   if (!enabled || revealing) return;
   stepStartedAt = performance.now();
   deadline = stepStartedAt + currentDelay();
-  waitingForBoard = false;
   lastBoardSignature = boardSignature();
   trainingMessage.textContent = 'Najdi další logický krok.';
   paint();
@@ -54,10 +42,6 @@ function paint() {
   trainingProgress.style.setProperty('--progress', `${remaining / currentDelay() * 100}%`);
   trainingProgress.textContent = `${(remaining / 1000).toFixed(1)} s`;
   if (!revealing && remaining <= 0) revealAndDemonstrate();
-}
-
-function tick() {
-  paint();
 }
 
 function record(technique, ms, assisted) {
@@ -92,13 +76,14 @@ async function revealAndDemonstrate() {
   }
   const technique = techniqueFromStatus();
   const action = target.dataset.hintAction;
+  const current = target.dataset.state || '';
   target.animate([
     { transform: 'scale(1)', boxShadow: 'inset 0 0 0 5px #facc15' },
     { transform: 'scale(1.10)', boxShadow: 'inset 0 0 0 7px #facc15' },
     { transform: 'scale(1)', boxShadow: 'inset 0 0 0 5px #facc15' }
   ], { duration: 650, easing: 'ease-in-out' });
   await sleep(900);
-  applyAction(target, action);
+  applyAction(target, current, action);
   record(technique, currentDelay(), true);
   trainingMessage.textContent = `${technique}: tah byl předveden. Pokračuj.`;
   await sleep(450);
@@ -106,13 +91,13 @@ async function revealAndDemonstrate() {
   startStep();
 }
 
-function applyAction(cell, action) {
+function applyAction(cell, current, action) {
+  const cycle = ['', 'x', 'q'];
   const desired = action === 'q' ? 'q' : action === 'x' ? 'x' : '';
-  for (let i = 0; i < 3 && (cell.dataset.state || '') !== desired; i++) cell.click();
-}
-
-function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  const from = cycle.indexOf(current);
+  const to = cycle.indexOf(desired);
+  const clicks = (to - from + cycle.length) % cycle.length;
+  for (let i = 0; i < clicks; i++) cell.click();
 }
 
 function toggleTraining() {
@@ -121,7 +106,7 @@ function toggleTraining() {
   trainingToggle.classList.toggle('active', enabled);
   trainingPanel.hidden = !enabled;
   if (enabled) {
-    timer = setInterval(tick, 50);
+    timer = setInterval(paint, 50);
     startStep();
   } else {
     clearInterval(timer);
@@ -136,18 +121,13 @@ trainingSkip.addEventListener('click', revealAndDemonstrate);
 
 board.addEventListener('click', event => {
   if (!enabled || revealing || !event.target.closest('.cell')) return;
+  const before = lastBoardSignature;
   setTimeout(() => {
-    const signature = boardSignature();
-    if (signature === lastBoardSignature) return;
+    const next = boardSignature();
+    if (!next || next === before) return;
     const elapsed = performance.now() - stepStartedAt;
     record('Self-found step', elapsed, false);
     trainingMessage.textContent = `Krok nalezen za ${(elapsed / 1000).toFixed(2)} s.`;
     startStep();
   }, 0);
 });
-
-new MutationObserver(() => {
-  if (!enabled || revealing || waitingForBoard) return;
-  const signature = boardSignature();
-  if (signature.length && signature !== lastBoardSignature) lastBoardSignature = signature;
-}).observe(board, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-state'] });
