@@ -1,4 +1,4 @@
-const CACHE = "queens-offline-v7";
+const CACHE = "queens-offline-v8";
 const CORE = [
   "./",
   "./index.html",
@@ -7,6 +7,7 @@ const CORE = [
   "./src/app.js",
   "./src/puzzles.js",
   "./src/generator-beta.js",
+  "./src/training.js",
   "./src/archive-random.js",
   "./src/drag-input.js",
   "./src/pwa.js"
@@ -37,13 +38,13 @@ self.addEventListener("fetch", event => {
           caches.open(CACHE).then(cache => cache.put("./index.html", copy));
           return response;
         })
-        .catch(() => caches.match("./index.html").then(response => response || caches.match("./")))
+        .catch(() => caches.match("./index.html", { ignoreSearch: true }).then(response => response || caches.match("./", { ignoreSearch: true })))
     );
     return;
   }
 
   event.respondWith(
-    caches.match(event.request).then(cached => {
+    caches.match(event.request, { ignoreSearch: true }).then(cached => {
       const network = fetch(event.request)
         .then(response => {
           if (response.ok) caches.open(CACHE).then(cache => cache.put(event.request, response.clone()));
