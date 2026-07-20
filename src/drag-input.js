@@ -43,11 +43,13 @@ board.addEventListener("click", event => {
 }, true);
 
 function applyCell(cell) {
-  const index = cell.dataset.index ?? cell.getAttribute("data-index") ?? cell.getAttribute("aria-label");
-  if (visited.has(index)) return;
+  // Cells are recreated after every move, so derive the stable board position
+  // from current DOM order rather than retaining the element itself.
+  const index = Array.prototype.indexOf.call(board.children, cell);
+  if (index < 0 || visited.has(index)) return;
   visited.add(index);
 
-  // The game re-renders after every click, so trigger the existing game logic
-  // rather than duplicating its state handling here.
+  // Trigger the main game's click handler so timer, hints and validation remain
+  // governed by the existing state logic.
   cell.click();
 }
